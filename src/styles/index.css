@@ -10,7 +10,7 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
   }
- 
+
   .dark {
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -21,13 +21,13 @@
 }
 
 :root {
-  --shadow-color: #3b1b55;
-  --dark-shadow-color: #aaa4b1;
+  --shadow-color: #4f46e5;
+  --dark-shadow-color: #a5b4fc;
 }
 
 .button-default {
-  --shadow-color: #3b1b55;
-  --dark-shadow-color: #aaa4b1;
+  --shadow-color: #4f46e5;
+  --dark-shadow-color: #a5b4fc;
 }
 
 .button-destructive {
@@ -61,7 +61,7 @@ input[type="number"] {
   height: 0;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
-  border-top: 8px solid #8b40ec; /* purple-600 */
+  border-top: 8px solid #6366f1; /* indigo-500 */
   image-rendering: pixelated;
   animation: bounce-horizontal 0.5s infinite;
 }

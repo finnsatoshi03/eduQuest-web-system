@@ -39,19 +39,17 @@ export const Timeline = ({ data }: { data: TimelineEntry[] }) => {
     <div className="h-full w-full font-sans" ref={containerRef}>
       <div className="mx-auto px-4 md:px-8 lg:px-10">
         <h2 className="mb-2 max-w-xl text-lg font-bold text-black dark:text-white md:mb-4 md:text-4xl">
-          Learning{" "}
-          <span className="rounded-xl bg-purple-900 px-2 text-purple-50">
-            Smarter
+          Epic{" "}
+          <span className="rounded-xl bg-indigo-600 px-2 text-white">
+            Powers
           </span>{" "}
-          and{" "}
-          <span className="rounded-xl bg-yellow-500 px-2 text-yellow-50">
-            Fun
-          </span>{" "}
-          with These Core{" "}
+          for{" "}
+          <span className="rounded-xl bg-amber-500 px-2 text-white">Epic</span>{" "}
+          Educators{" "}
           <span className="relative">
-            Features
+            🎯
             <svg
-              className="absolute -bottom-3 left-1/2 w-[90px] -translate-x-1/2 transform text-purple-700 md:w-[180px]"
+              className="absolute -bottom-3 left-1/2 w-[90px] -translate-x-1/2 transform text-indigo-600 md:w-[180px]"
               height="20"
               viewBox="0 0 180 20"
               fill="none"
@@ -66,9 +64,9 @@ export const Timeline = ({ data }: { data: TimelineEntry[] }) => {
             </svg>
           </span>
         </h2>
-        <p className="max-w-sm text-sm text-neutral-700 dark:text-neutral-300 md:text-base">
-          Discover how our app simplifies quiz creation, grading, and student
-          engagement.
+        <p className="max-w-lg text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 md:text-base">
+          Everything you need to create magical learning moments. From AI
+          automation to real-time competition, we've got your back!
         </p>
       </div>
 
@@ -116,7 +114,7 @@ export const Timeline = ({ data }: { data: TimelineEntry[] }) => {
               height: heightTransform,
               opacity: opacityTransform,
             }}
-            className="absolute inset-x-0 top-0 w-[2px] rounded-full bg-gradient-to-t from-yellow-500 from-[0%] via-violet-500 via-[30%] to-transparent"
+            className="absolute inset-x-0 top-0 w-[2px] rounded-full bg-gradient-to-t from-amber-500 from-[0%] via-indigo-500 via-[30%] to-transparent"
           />
         </div>
       </div>

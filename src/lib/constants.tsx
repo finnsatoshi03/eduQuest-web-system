@@ -8,8 +8,8 @@ type GameColors = {
 };
 
 export const GAME_COLORS: GameColors = {
-  light: ["#D2691E", "#FF7F50", "#FFD700", "#32CD32", "#4682B4"],
-  dark: ["#CD853F", "#FF6347", "#FFA500", "#9ACD32", "#5F9EA0"],
+  light: ["#6366f1", "#14b8a6", "#f59e0b", "#8b5cf6", "#06b6d4"],
+  dark: ["#818cf8", "#5eead4", "#fbbf24", "#a78bfa", "#22d3ee"],
 };
 
 export const BLOGS = [

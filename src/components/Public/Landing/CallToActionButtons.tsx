@@ -44,8 +44,8 @@ interface CallToActionButtonsProps {
 export default function CallToActionButtons({
   align = "left",
   firstButtonNavLink = "button",
-  firstButtonTo = "/explore",
-  firstButtonText = "Explore",
+  firstButtonTo = "/login",
+  firstButtonText = "Start Playing",
   secondButtonTo = "/faq",
   secondButtonText = "Learn More",
 }: CallToActionButtonsProps) {
@@ -65,7 +65,7 @@ export default function CallToActionButtons({
       {firstButtonNavLink === "button" ? (
         <div onClick={() => scrollToSection("explore")}>
           <motion.div custom={0} variants={buttonFadeIn}>
-            <Button className="relative flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#3b1b55] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#aaa4b1] dark:hover:shadow-none md:w-full">
+            <Button className="relative flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#4f46e5] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#a5b4fc] dark:hover:shadow-none md:w-full">
               {firstButtonText} <ChevronRight />
               {/* <motion.img
                 custom={2}
@@ -80,7 +80,7 @@ export default function CallToActionButtons({
       ) : (
         <NavLink to={firstButtonTo}>
           <motion.div custom={0} variants={buttonFadeIn}>
-            <Button className="relative flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#3b1b55] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#aaa4b1] dark:hover:shadow-none md:w-full">
+            <Button className="relative flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#4f46e5] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#a5b4fc] dark:hover:shadow-none md:w-full">
               {firstButtonText} <ChevronRight />
               {/* {!hideArrow && (
                 <motion.img
@@ -99,7 +99,7 @@ export default function CallToActionButtons({
         <motion.div custom={1} variants={buttonFadeIn}>
           <Button
             variant="secondary"
-            className="flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#aaa4b1] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#3b1b55] dark:hover:shadow-none md:w-full"
+            className="flex h-fit w-60 items-center gap-1 rounded-md px-6 py-3 text-lg font-normal shadow-[0px_4px_0px_#a5b4fc] transition-all duration-300 hover:translate-y-1 hover:shadow-none dark:shadow-[0px_4px_0px_#4f46e5] dark:hover:shadow-none md:w-full"
           >
             {secondButtonText} <ChevronRight />
           </Button>

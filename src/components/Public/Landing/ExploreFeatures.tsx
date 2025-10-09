@@ -2,15 +2,15 @@ import { Timeline } from "@/components/Shared/timeline";
 
 const data = [
   {
-    title: "AI-Powered Quiz Creation",
+    title: "⚡ AI Quiz Generator",
     description:
-      "Upload a PDF, and our AI instantly generates quizzes. Save time and effort.",
+      "Drop any PDF, and boom! Our AI creates custom quizzes in seconds. No more late-night question writing—just upload and go!",
     content: (
       <video
         autoPlay
         muted
         loop
-        className="rounded-3xl border-8 border-blue-800"
+        className="rounded-3xl border-8 border-indigo-600"
       >
         <source src="/videos/snippet-1.mp4" type="video/mp4" />
         Your browser does not support the video tag.
@@ -18,15 +18,15 @@ const data = [
     ),
   },
   {
-    title: "Customizable Quiz Types",
+    title: "🎯 Multiple Game Modes",
     description:
-      "Choose from multiple formats: True/False, Multiple Choice, Matching, and more. Flexibility for any class.",
+      "True/False, Multiple Choice, Matching—you name it! Mix and match question types to keep things fresh and exciting for every learning style.",
     content: (
       <video
         autoPlay
         muted
         loop
-        className="rounded-3xl border-8 border-cyan-800"
+        className="rounded-3xl border-8 border-teal-600"
       >
         <source src="/videos/snippet-2.mp4" type="video/mp4" />
         Your browser does not support the video tag.
@@ -34,15 +34,15 @@ const data = [
     ),
   },
   {
-    title: "Gamified Learning Experience",
+    title: "🎮 Level-Up Learning",
     description:
-      "Turn learning into a game. Keep students engaged and motivated with interactive quizzes.",
+      "Turn boring tests into epic challenges! Points, power-ups, and instant feedback make every answer feel like a win.",
     content: (
       <video
         autoPlay
         muted
         loop
-        className="rounded-3xl border-8 border-yellow-800"
+        className="rounded-3xl border-8 border-amber-500"
       >
         <source src="/videos/snippet-3.mp4" type="video/mp4" />
         Your browser does not support the video tag.
@@ -50,15 +50,15 @@ const data = [
     ),
   },
   {
-    title: "Leaderboard for Competitive Learning",
+    title: "🏆 Live Leaderboards",
     description:
-      "Real-time ranking boosts competition. Students compete for top spots, driving continuous improvement.",
+      "Watch the competition heat up! Real-time rankings fuel friendly rivalry and push students to level up their game.",
     content: (
       <video
         autoPlay
         muted
         loop
-        className="rounded-3xl border-8 border-purple-800"
+        className="rounded-3xl border-8 border-violet-600"
       >
         <source src="/videos/snippet-4.mp4" type="video/mp4" />
         Your browser does not support the video tag.
@@ -66,9 +66,9 @@ const data = [
     ),
   },
   {
-    title: "Interactive & User-Friendly Design",
+    title: "✨ Pixel-Perfect Design",
     description:
-      "Gaming-inspired design. Intuitive and fun for students and educators alike.",
+      "Retro-cool meets modern UI. A gaming-inspired interface that's so fun to use, both teachers and students will love every click!",
     content: <p>Content Here</p>,
   },
 ];

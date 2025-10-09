@@ -26,7 +26,7 @@ export default function LandingPage() {
         className="relative my-8 flex h-[calc(100%-12rem)] w-full flex-col items-center justify-center space-y-8"
       >
         <Header />
-        <CallToActionButtons />
+        <CallToActionButtons firstButtonNavLink="NavLink" />
       </motion.div>
       <ExploreFeatures />
       <BlogCarousel />

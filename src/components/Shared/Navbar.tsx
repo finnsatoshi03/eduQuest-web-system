@@ -17,11 +17,10 @@ import { createQuiz } from "@/services/api/apiQuiz";
 import toast from "react-hot-toast";
 
 const PUBLIC_NAV_ITEMS = [
+  { path: "/", label: "Home" },
   { path: "/about", label: "About" },
-  { path: "/contact", label: "Contact" },
   { path: "/faq", label: "FAQ" },
-  { path: "/terms", label: "Terms" },
-  { path: "/privacy", label: "Privacy Policy" },
+  { path: "/contact", label: "Contact" },
 ];
 
 const getAuthNavItems = (role: "professor" | "student" | null) => [
@@ -122,7 +121,7 @@ export default function Navbar() {
       to={to}
       onClick={closeMenu} // Close menu when clicked
       className={({ isActive }) =>
-        `relative font-bold md:px-4 md:py-2 ${isActive ? "md:text-purple-600" : "md:text-gray-600"}`
+        `relative font-bold md:px-4 md:py-2 ${isActive ? "md:text-indigo-600" : "md:text-gray-600"}`
       }
     >
       {label}
@@ -134,33 +133,46 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="relative z-50 flex w-full items-center justify-between bg-zinc-50 py-4 dark:bg-zinc-900">
-        <ul className="flex items-center gap-8">
-          <NavLink to="/" onClick={closeMenu}>
-            <img src="/edu-quest-logo.png" alt="Logo" className="w-14" />
+      <nav className="relative z-50 flex w-full items-center justify-between bg-zinc-50 px-2 py-4 dark:bg-zinc-900 md:px-0">
+        {/* Logo Section */}
+        <div className="flex items-center">
+          <NavLink
+            to="/"
+            onClick={closeMenu}
+            className="flex items-center gap-2"
+          >
+            <img
+              src="/edu-quest-logo.png"
+              alt="EduQuest Logo"
+              className="w-12 md:w-14"
+            />
           </NavLink>
-          <li className="hidden items-center gap-4 md:flex">
-            {navItems.map(({ path, label }, index) => (
-              <NavItem key={path} to={path} label={label} index={index} />
-            ))}
-          </li>
+        </div>
+
+        {/* Center Navigation - Desktop */}
+        <ul className="absolute left-1/2 hidden flex-1 -translate-x-1/2 items-center justify-center gap-6 md:flex">
+          {navItems.map(({ path, label }, index) => (
+            <NavItem key={path} to={path} label={label} index={index} />
+          ))}
         </ul>
-        <ul className="flex items-center gap-2">
+
+        {/* Right Section - Actions */}
+        <ul className="flex items-center gap-2 md:gap-3">
           <ModeToggle />
-          <li className="hidden gap-2 md:flex">
+          <li className="hidden items-center gap-2 md:flex">
             {user ? (
               <>
                 {isProfessor && (
                   <Button
                     onClick={() => createNewQuiz()}
-                    className="gap-1 px-3"
+                    className="gap-1 px-4"
                     disabled={isCreatingQuiz}
                   >
                     {isCreatingQuiz ? (
                       "Creating..."
                     ) : (
                       <>
-                        <Plus size={16} /> Create Quiz
+                        <Plus size={16} /> Create
                       </>
                     )}
                   </Button>
@@ -172,7 +184,7 @@ export default function Navbar() {
                 >
                   <DropdownMenuTrigger asChild>
                     <div
-                      className={`flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-200 p-1 transition-transform duration-300 ease-in-out dark:bg-purple-800 ${
+                      className={`flex size-9 cursor-pointer items-center justify-center rounded-full bg-indigo-100 p-1 transition-transform duration-300 ease-in-out hover:bg-indigo-200 dark:bg-indigo-700 dark:hover:bg-indigo-600 ${
                         isDropdownOpen ? "rotate-180" : "rotate-0"
                       }`}
                     >
@@ -205,18 +217,21 @@ export default function Navbar() {
             ) : (
               AUTH_ITEMS.map(({ path, label, variant }) => (
                 <NavLink key={path} to={path} onClick={closeMenu}>
-                  <Button variant={variant}>{label}</Button>
+                  <Button variant={variant} className="px-5">
+                    {label}
+                  </Button>
                 </NavLink>
               ))
             )}
           </li>
+          {/* Mobile Menu Toggle */}
           <div
-            className={`block cursor-pointer transition-transform duration-300 ease-in-out md:hidden ${
+            className={`flex cursor-pointer items-center justify-center rounded-full bg-zinc-200 p-2 transition-transform duration-300 ease-in-out hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 md:hidden ${
               isMenuOpen ? "rotate-180" : "rotate-0"
             }`}
             onClick={toggleMenu}
           >
-            {isMenuOpen ? <X /> : <Menu />}
+            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </div>
         </ul>
       </nav>

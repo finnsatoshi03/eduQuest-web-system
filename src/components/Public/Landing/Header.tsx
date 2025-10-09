@@ -68,67 +68,64 @@ export default function Header() {
           <motion.img src="student-welcome.gif" className="w-20" />
           <motion.p
             custom={0}
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 -translate-y-1/2 transform text-sm md:text-base"
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 -translate-y-1/2 transform text-sm font-medium md:text-base"
           >
-            {splitText("Welcome to Quiz Bee with You")}
+            {splitText("Level Up Your Learning!")}
           </motion.p>
-          <motion.img src="wizard-welcome.gif" className="w-48" />
+          <motion.img
+            src="wizard-welcome.gif"
+            className="absolute -right-12 w-48"
+          />
         </motion.div>
 
-        <motion.h1 custom={1} className="mt-2 text-5xl font-bold md:text-7xl">
-          {splitText("The ")}
+        <motion.h1
+          custom={1}
+          className="mt-2 text-5xl font-bold leading-tight md:text-7xl"
+        >
+          {splitText("Where ")}
           <span className="relative">
-            {splitText("best")}
+            {splitText("Learning")}
             <motion.div
               custom={2}
               variants={elementFadeIn}
-              className="absolute -left-4 top-2 size-4 fill-yellow-500 text-yellow-500 md:-left-6 md:size-6"
+              className="absolute -left-4 top-2 size-4 fill-amber-400 text-amber-400 md:-left-6 md:size-6"
               style={{ rotate }}
             >
               <Sparkles />
             </motion.div>
-          </span>{" "}
-          {splitText("platform where")}
+          </span>
           <br />
+          {splitText("Meets ")}
           <motion.span
             custom={3}
-            className="font-pixel relative font-semibold italic text-purple-900 dark:text-purple-500"
+            className="font-pixel relative font-semibold italic text-indigo-600 dark:text-indigo-400"
           >
-            {splitText("Knowledge")}
+            {splitText("Adventure")}
             <motion.img
               custom={4}
               variants={elementFadeIn}
               src="/hash.png"
               className="absolute -left-4 top-0 w-8 rotate-2 md:-left-7 md:-top-2 md:w-14"
             />
-          </motion.span>{" "}
-          {splitText("and")}
+          </motion.span>
+          <br />
+          {splitText("in Every ")}
           <motion.span
             custom={5}
-            className="font-pixel relative z-10 font-semibold italic text-yellow-500"
+            className="font-pixel relative z-10 font-semibold italic text-amber-500"
           >
-            {" "}
-            {splitText("Play")}
-            <br />
-            {/* <motion.img
-              custom={6}
-              variants={elementFadeIn}
-              src="/arrow-down.png"
-              className="absolute -bottom-8 -right-8 z-0 w-14 md:-bottom-14 md:-right-14 md:w-24"
-              animate={{ rotate: 20 }}
-            /> */}
-          </motion.span>{" "}
-          {splitText("Come Together")}
+            {splitText("Quiz")}
+          </motion.span>
         </motion.h1>
       </motion.div>
 
       <motion.div
         variants={staggerContainer}
-        className="relative w-1/2 text-xs md:text-sm"
+        className="relative w-full max-w-2xl text-sm leading-relaxed md:text-base"
       >
-        <motion.p className="relative z-20 opacity-80">
+        <motion.p className="relative z-20 opacity-90">
           {splitText(
-            "We combine learning and fun with AI-generated quizzes for students and educators. Upload files, and let AI do the rest.",
+            "Transform any lesson into an epic quest! EduQuest uses AI magic to create interactive quizzes that make learning feel like play. Upload, generate, and watch your students compete for glory!",
           )}
         </motion.p>
       </motion.div>

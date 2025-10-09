@@ -1,69 +1,32 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface PixelShape {
+interface FloatingBlob {
   x: number;
   y: number;
   size: number;
   color: string;
+  speedX: number;
+  speedY: number;
+  opacity: number;
+  rotation: number;
+  rotationSpeed: number;
 }
-interface PixelElement {
+
+interface GeometricShape {
   x: number;
   y: number;
-  color: string;
-  speed: number;
   size: number;
-  shape?: PixelShape[];
-  type: "pixel" | "character" | "shootingStar";
-  directionX?: number;
-  directionY?: number;
+  color: string;
+  type: "circle" | "triangle" | "square" | "star";
+  speedX: number;
+  speedY: number;
+  rotation: number;
+  rotationSpeed: number;
+  opacity: number;
 }
 
-// Helper function to create predefined 8-bit characters using pixel shapes
-const createCharacterShape = (type: string) => {
-  switch (type) {
-    case "character1": // Simple 8-bit character example (like a space invader)
-      return [
-        { x: 0, y: 0, size: 1, color: "#00ff00" },
-        { x: 1, y: 0, size: 1, color: "#00ff00" },
-        { x: 0, y: 1, size: 1, color: "#00ff00" },
-        { x: 1, y: 1, size: 1, color: "#00ff00" },
-        { x: 2, y: 0, size: 1, color: "#00ff00" },
-      ]; // A simple 3x3 block character
-    case "character2": // Another example character
-      return [
-        { x: 0, y: 0, size: 1, color: "#ff0000" },
-        { x: 0, y: 1, size: 1, color: "#ff0000" },
-        { x: 1, y: 1, size: 1, color: "#ff0000" },
-        { x: 2, y: 1, size: 1, color: "#ff0000" },
-        { x: 2, y: 2, size: 1, color: "#ff0000" },
-      ]; // Another blocky character
-    default:
-      return [];
-  }
-};
-
-// Function to create a shooting star (meteor) with a trail
-const createShootingStar = () => {
-  const trailLength = Math.floor(Math.random() * 5) + 3;
-  const starColor = "#fffacd"; // Pale yellow for the shooting star
-  const trail = Array.from({ length: trailLength }, (_, i) => ({
-    x: i * -1, // Trail behind the star
-    y: i * -1,
-    size: 0.5,
-    color: starColor,
-  }));
-  return trail.concat({
-    x: 0,
-    y: 0,
-    size: 1.5, // The head of the shooting star
-    color: "#ffffff",
-  });
-};
-
-const PIXEL_COUNT = 500; // Reduced from 1500
-const CHARACTER_COUNT = 3; // Reduced from 5
-const SHOOTING_STAR_COUNT = 5; // Reduced from 10
+const BLOB_COUNT = 8; // Large gradient blobs
+const SHAPE_COUNT = 15; // Smaller geometric shapes
 
 export const PixelatedBackground = ({
   isDarkMode,
@@ -71,68 +34,87 @@ export const PixelatedBackground = ({
   isDarkMode: boolean;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [elements, setElements] = useState<PixelElement[]>([]);
+  const [blobs, setBlobs] = useState<FloatingBlob[]>([]);
+  const [shapes, setShapes] = useState<GeometricShape[]>([]);
+  const timeRef = useRef(0);
 
-  const generateElements = useCallback(() => {
-    const colors = isDarkMode
-      ? ["#1a2639", "#1e3a5f", "#3d5a80", "#98c1d9"]
-      : ["#e0f0e3", "#c6dea6", "#7ebdc3", "#b7d3f2"];
+  const generateBlobs = useCallback(() => {
+    // Modern gradient blob colors - vibrant brand palette
+    const blobColors = isDarkMode
+      ? [
+          "rgba(99, 102, 241, 0.15)", // Indigo-500
+          "rgba(129, 140, 248, 0.12)", // Indigo-400
+          "rgba(167, 139, 250, 0.15)", // Violet-400
+          "rgba(251, 191, 36, 0.1)", // Amber-400
+          "rgba(245, 158, 11, 0.12)", // Amber-500
+        ]
+      : [
+          "rgba(199, 210, 254, 0.3)", // Indigo-200
+          "rgba(165, 180, 252, 0.25)", // Indigo-300
+          "rgba(196, 181, 253, 0.3)", // Violet-300
+          "rgba(253, 230, 138, 0.35)", // Amber-200
+          "rgba(252, 211, 77, 0.3)", // Amber-300
+        ];
 
-    const newElements: PixelElement[] = [];
+    return Array.from({ length: BLOB_COUNT }, () => ({
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 250 + 200, // Large blobs: 200-450px
+      color: blobColors[Math.floor(Math.random() * blobColors.length)],
+      speedX: (Math.random() - 0.5) * 0.015,
+      speedY: (Math.random() - 0.5) * 0.015,
+      opacity: Math.random() * 0.4 + 0.3,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 0.2,
+    }));
+  }, [isDarkMode]);
 
-    // Add pixels for the background
-    for (let i = 0; i < PIXEL_COUNT; i++) {
-      newElements.push({
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        speed: Math.random() * 0.03 + 0.01,
-        size: Math.random() * 0.3 + 0.1,
-        type: "pixel",
-      });
-    }
+  const generateShapes = useCallback(() => {
+    const shapeTypes: Array<"circle" | "triangle" | "square" | "star"> = [
+      "circle",
+      "triangle",
+      "square",
+      "star",
+    ];
 
-    // Add 8-bit characters
-    for (let i = 0; i < CHARACTER_COUNT; i++) {
-      const characterType = i % 2 === 0 ? "character1" : "character2";
-      newElements.push({
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        color: colors[Math.floor(Math.random() * colors.length)], // Add default color
-        shape: createCharacterShape(characterType),
-        type: "character",
-        speed: Math.random() * 0.02 + 0.005,
-        size: 5,
-      });
-    }
+    const shapeColors = isDarkMode
+      ? [
+          "rgba(99, 102, 241, 0.2)", // Indigo
+          "rgba(251, 191, 36, 0.2)", // Amber
+          "rgba(167, 139, 250, 0.18)", // Violet
+          "rgba(134, 239, 172, 0.15)", // Green
+        ]
+      : [
+          "rgba(99, 102, 241, 0.25)", // Indigo
+          "rgba(251, 191, 36, 0.3)", // Amber
+          "rgba(167, 139, 250, 0.25)", // Violet
+          "rgba(134, 239, 172, 0.2)", // Green
+        ];
 
-    // Add shooting stars (meteors)
-    for (let i = 0; i < SHOOTING_STAR_COUNT; i++) {
-      newElements.push({
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        color: "#ffffff", // Add default color
-        shape: createShootingStar(),
-        type: "shootingStar",
-        speed: Math.random() * 0.05 + 0.02,
-        directionX: Math.random() * 0.05 + 0.03,
-        directionY: Math.random() * 0.05 + 0.03,
-        size: 5,
-      });
-    }
-
-    return newElements;
+    return Array.from({ length: SHAPE_COUNT }, () => ({
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 40 + 20, // 20-60px
+      color: shapeColors[Math.floor(Math.random() * shapeColors.length)],
+      type: shapeTypes[Math.floor(Math.random() * shapeTypes.length)],
+      speedX: (Math.random() - 0.5) * 0.03,
+      speedY: (Math.random() - 0.5) * 0.03,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 0.5,
+      opacity: Math.random() * 0.3 + 0.2,
+    }));
   }, [isDarkMode]);
 
   useEffect(() => {
-    setElements(generateElements());
-  }, [isDarkMode, generateElements]);
+    setBlobs(generateBlobs());
+    setShapes(generateShapes());
+  }, [isDarkMode, generateBlobs, generateShapes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
     const resizeCanvas = () => {
@@ -145,40 +127,114 @@ export const PixelatedBackground = ({
 
     let animationFrameId: number;
 
+    const drawBlob = (blob: FloatingBlob, canvas: HTMLCanvasElement) => {
+      const x = (blob.x / 100) * canvas.width;
+      const y = (blob.y / 100) * canvas.height;
+
+      // Create radial gradient for blob
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, blob.size);
+      gradient.addColorStop(0, blob.color);
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((blob.rotation * Math.PI) / 180);
+      ctx.scale(1, 0.8); // Slightly squished for organic feel
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, blob.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const drawShape = (shape: GeometricShape, canvas: HTMLCanvasElement) => {
+      const x = (shape.x / 100) * canvas.width;
+      const y = (shape.y / 100) * canvas.height;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((shape.rotation * Math.PI) / 180);
+      ctx.fillStyle = shape.color;
+      ctx.globalAlpha = shape.opacity;
+
+      switch (shape.type) {
+        case "circle":
+          ctx.beginPath();
+          ctx.arc(0, 0, shape.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+
+        case "square":
+          ctx.fillRect(
+            -shape.size / 2,
+            -shape.size / 2,
+            shape.size,
+            shape.size,
+          );
+          break;
+
+        case "triangle":
+          ctx.beginPath();
+          ctx.moveTo(0, -shape.size / 2);
+          ctx.lineTo(shape.size / 2, shape.size / 2);
+          ctx.lineTo(-shape.size / 2, shape.size / 2);
+          ctx.closePath();
+          ctx.fill();
+          break;
+
+        case "star":
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+            const radius = i % 2 === 0 ? shape.size / 2 : shape.size / 4;
+            const px = Math.cos(angle) * radius;
+            const py = Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+          break;
+      }
+
+      ctx.restore();
+    };
+
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      timeRef.current += 0.016; // ~60fps
 
-      elements.forEach((element) => {
-        if (element.type === "shootingStar") {
-          element.x = (element.x + (element.directionX ?? 0)) % 100;
-          element.y = (element.y + (element.directionY ?? 0)) % 100;
-        } else {
-          element.y = (element.y + element.speed) % 100;
-          element.x =
-            (element.x + Math.sin(element.y * 0.1) * 0.02 + 100) % 100;
-        }
+      // Update and draw blobs with floating animation
+      blobs.forEach((blob) => {
+        // Organic floating motion using sine waves
+        blob.x += blob.speedX + Math.sin(timeRef.current + blob.y) * 0.01;
+        blob.y += blob.speedY + Math.cos(timeRef.current + blob.x) * 0.01;
+        blob.rotation += blob.rotationSpeed;
 
-        if (element.type === "character" || element.type === "shootingStar") {
-          element.shape?.forEach((pixel: any) => {
-            ctx.fillStyle = pixel.color;
-            ctx.globalAlpha = 0.9;
-            ctx.fillRect(
-              ((element.x + pixel.x) / 100) * canvas.width,
-              ((element.y + pixel.y) / 100) * canvas.height,
-              (pixel.size / 100) * canvas.width,
-              (pixel.size / 100) * canvas.height,
-            );
-          });
-        } else {
-          ctx.fillStyle = element.color;
-          ctx.globalAlpha = 0.7;
-          ctx.fillRect(
-            (element.x / 100) * canvas.width,
-            (element.y / 100) * canvas.height,
-            (element.size / 100) * canvas.width,
-            (element.size / 100) * canvas.height,
-          );
-        }
+        // Wrap around screen
+        if (blob.x < -10) blob.x = 110;
+        if (blob.x > 110) blob.x = -10;
+        if (blob.y < -10) blob.y = 110;
+        if (blob.y > 110) blob.y = -10;
+
+        drawBlob(blob, canvas);
+      });
+
+      // Update and draw geometric shapes
+      shapes.forEach((shape) => {
+        shape.x += shape.speedX;
+        shape.y += shape.speedY;
+        shape.rotation += shape.rotationSpeed;
+
+        // Wrap around screen
+        if (shape.x < -5) shape.x = 105;
+        if (shape.x > 105) shape.x = -5;
+        if (shape.y < -5) shape.y = 105;
+        if (shape.y > 105) shape.y = -5;
+
+        drawShape(shape, canvas);
       });
 
       animationFrameId = requestAnimationFrame(render);
@@ -190,7 +246,13 @@ export const PixelatedBackground = ({
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener("resize", resizeCanvas);
     };
-  }, [elements]);
+  }, [blobs, shapes]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 h-full w-full"
+      style={{ opacity: 0.8 }}
+    />
+  );
 };

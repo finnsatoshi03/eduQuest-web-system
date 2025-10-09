@@ -10,13 +10,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-purple-900 text-purple-50 shadow hover:bg-purple-900/90 dark:bg-purple-50 dark:text-purple-900 dark:hover:bg-purple-50/90",
+          "bg-indigo-600 text-white shadow hover:bg-indigo-700 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-600",
         destructive:
           "bg-red-500 text-zinc-50 shadow-sm hover:bg-red-500/90 dark:bg-red-900 dark:text-zinc-50 dark:hover:bg-red-900/90",
         outline:
-          "border border-purple-200 bg-transparent shadow-sm hover:bg-purple-100 hover:text-purple-900 dark:border-purple-800 dark:hover:bg-purple-800 dark:hover:text-purple-50",
+          "border border-indigo-200 bg-transparent shadow-sm hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-700 dark:hover:bg-indigo-900 dark:hover:text-indigo-200",
         secondary:
-          "bg-purple-100 text-purple-900 shadow-sm hover:bg-purple-100/80 dark:bg-purple-800 dark:text-purple-50 dark:hover:bg-purple-800/80",
+          "bg-indigo-100 text-indigo-700 shadow-sm hover:bg-indigo-200 dark:bg-indigo-900 dark:text-indigo-200 dark:hover:bg-indigo-800",
         ghost:
           "hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50",
         link: "text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50",

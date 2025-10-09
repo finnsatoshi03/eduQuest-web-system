@@ -11,9 +11,9 @@ export function BlogCarousel() {
       <div className="pl-4">
         <h2 className="mb-2 font-sans text-lg font-bold text-black dark:text-white md:mb-4 md:text-4xl">
           <span className="relative">
-            Explore{" "}
+            Level Up{" "}
             <svg
-              className="absolute -bottom-3 left-1/2 w-[70px] -translate-x-1/2 transform text-purple-700 md:w-[140px]"
+              className="absolute -bottom-3 left-1/2 w-[70px] -translate-x-1/2 transform text-indigo-600 md:w-[140px]"
               height="20"
               viewBox="0 0 140 20"
               fill="none"
@@ -27,14 +27,13 @@ export function BlogCarousel() {
               />
             </svg>
           </span>{" "}
-          Our{" "}
-          <span className="rounded-xl bg-yellow-500 px-2 text-yellow-50">
-            Resources
-          </span>
+          Your{" "}
+          <span className="rounded-xl bg-amber-500 px-2 text-white">Game</span>{" "}
+          📚
         </h2>
-        <p className="max-w-sm text-sm text-neutral-700 dark:text-neutral-300 md:text-base">
-          Discover tips, guides, and tools to enhance learning and teaching.
-          Stay updated with our latest articles and resources.
+        <p className="max-w-lg text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 md:text-base">
+          Pro tips, power moves, and insider secrets to master EduQuest. Learn
+          how to create quizzes that students can't stop playing!
         </p>
       </div>
       <Carousel items={cards} />
