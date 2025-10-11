@@ -218,7 +218,7 @@ export default function QuizEditQuestion() {
                       .map((_, index) => (
                         <div
                           key={index}
-                          className="size-12 rounded-lg bg-zinc-700 text-white"
+                          className="size-12 rounded-lg bg-slate-500 text-white dark:bg-zinc-700"
                         />
                       ))}
               </div>

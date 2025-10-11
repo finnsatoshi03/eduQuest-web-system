@@ -163,40 +163,54 @@ const App: React.FC = () => {
       </ThemeProvider>
 
       <Toaster
-        position="top-center"
-        gutter={12}
+        position="bottom-right"
+        gutter={16}
         containerStyle={{
-          margin: "8px",
+          margin: "16px",
         }}
         toastOptions={{
+          // Success variant - Green with celebration
           success: {
-            duration: 3000,
+            duration: 4000,
             style: {
-              background: "#5cdb5c",
+              background: "#4ade80",
               color: "#000",
+              fontWeight: "700",
+              border: "4px solid #000",
+              borderRadius: "0",
+              boxShadow: "6px 6px 0 #000",
             },
             icon: "🎉",
           },
+          // Error variant - Red with warning
           error: {
             duration: 5000,
             style: {
-              background: "#ff6b6b",
+              background: "#f87171",
               color: "#000",
+              fontWeight: "700",
+              border: "4px solid #000",
+              borderRadius: "0",
+              boxShadow: "6px 6px 0 #000",
             },
-            icon: "💔",
+            icon: "⚠️",
           },
+          // Default/Info variant - Blue
           style: {
+            background: "#60a5fa",
+            color: "#000",
             fontSize: "16px",
+            fontWeight: "700",
             maxWidth: "500px",
             padding: "16px 24px",
-            backgroundColor: "#f0f0f0",
-            color: "#000",
             border: "4px solid #000",
-            boxShadow: "4px 4px 0 #000",
+            borderRadius: "0",
+            boxShadow: "6px 6px 0 #000",
             fontFamily: "'Press Start 2P', cursive",
             imageRendering: "pixelated",
-            borderRadius: "0",
           },
+          // Default icon
+          icon: "💡",
         }}
       />
     </>

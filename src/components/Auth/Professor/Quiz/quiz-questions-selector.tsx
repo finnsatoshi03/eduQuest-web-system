@@ -90,7 +90,7 @@ export default function MaxQuestionsSelector() {
               key={option}
               onClick={() => handleOptionClick(option)}
               variant={"outline"}
-              className={`rounded-lg border-2 p-4 py-6 shadow-lg transition-transform hover:scale-105 ${selectedOption === option ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white" : "text-black dark:text-white"}`}
+              className={`rounded-lg border-2 p-4 py-6 shadow-lg transition-transform hover:scale-105 ${selectedOption === option ? "bg-gradient-to-r from-indigo-500 to-indigo-500 text-white" : "text-black dark:text-white"}`}
               disabled={isLoading}
             >
               <span>{option} Questions</span>
@@ -104,8 +104,8 @@ export default function MaxQuestionsSelector() {
           onClick={handleCustomOptionClick}
           className={`w-full px-6 py-4 font-semibold ${
             showCustomInput
-              ? "bg-white text-purple-600"
-              : "bg-purple-700 hover:bg-purple-800"
+              ? "bg-white text-indigo-600"
+              : "bg-indigo-700 hover:bg-indigo-800"
           }`}
           disabled={isLoading}
         >

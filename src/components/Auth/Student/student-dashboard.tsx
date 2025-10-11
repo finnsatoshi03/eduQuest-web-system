@@ -61,7 +61,7 @@ const AnimalIconInput: React.FC = () => {
   // Original join view
   return (
     <div className="flex h-[calc(100%-10rem)] flex-col items-center justify-center">
-      <div className="text-purple-500">
+      <div className="text-indigo-500">
         {isJoining ? (
           <Loader2 size={120} className="mb-8 animate-spin" />
         ) : error ? (
@@ -81,7 +81,7 @@ const AnimalIconInput: React.FC = () => {
         )}
       </div>
       <div className="text-center">
-        <h1 className="mb-6 text-3xl font-bold text-purple-500">Join Quiz</h1>
+        <h1 className="mb-6 text-3xl font-bold text-indigo-500">Join Quiz</h1>
         {error && <p className="my-2 text-red-500">{error}</p>}
       </div>
       <form onSubmit={handleJoin} className="relative flex space-x-2">

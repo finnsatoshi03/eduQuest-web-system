@@ -1,1 +1,1 @@
-export const qgen = "https://api.quizbeewithyou.online/generate-questions";
+export const qgen = "http://localhost:5000/generate-questions";

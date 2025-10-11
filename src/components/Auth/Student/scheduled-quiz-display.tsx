@@ -28,7 +28,7 @@ const TimeDisplay: React.FC<{
   icon: React.ReactNode;
 }> = ({ label, time, icon }) => (
   <div className="flex items-center space-x-3 text-gray-700">
-    <div className="text-purple-500">{icon}</div>
+    <div className="text-indigo-500">{icon}</div>
     <div>
       <p className="text-sm font-medium text-gray-500">{label}</p>
       <p className="text-base font-semibold">{formatDateTime(time)}</p>
@@ -58,11 +58,11 @@ const ScheduledQuizDisplay: React.FC<ScheduledQuizInfo> = ({
       <CardContent className="space-y-6 dark:bg-zinc-800">
         <CardHeader className="space-y-1">
           <div className="mb-4 flex justify-center">
-            <div className="rounded-full bg-purple-100 p-3">
-              <Calendar className="h-8 w-8 text-purple-500" />
+            <div className="rounded-full bg-indigo-100 p-3">
+              <Calendar className="h-8 w-8 text-indigo-500" />
             </div>
           </div>
-          <CardTitle className="text-center text-2xl text-purple-500">
+          <CardTitle className="text-center text-2xl text-indigo-500">
             {quizTitle}
           </CardTitle>
           <p className="text-center text-sm text-gray-500">

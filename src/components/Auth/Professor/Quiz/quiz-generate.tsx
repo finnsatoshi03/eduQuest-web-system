@@ -100,7 +100,7 @@ export default function QuizGenerate() {
                     <input {...getInputProps()} />
                     {dropzoneIsDragActive ? (
                       <div className="flex flex-col items-center">
-                        <ArrowDownCircle className="h-16 w-16 animate-bounce text-purple-500" />
+                        <ArrowDownCircle className="h-16 w-16 animate-bounce text-indigo-600" />
                         <p
                           className={`mt-4 ${dropzoneIsDragActive && "text-zinc-900"}`}
                         >
@@ -110,7 +110,7 @@ export default function QuizGenerate() {
                     ) : field.value ? (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <FileIcon className="h-8 w-8 text-purple-500" />
+                          <FileIcon className="h-8 w-8 text-indigo-600" />
                           <div className="text-left">
                             <p className="font-semibold">{field.value.name}</p>
                             <p className="text-sm text-gray-500">
@@ -137,19 +137,19 @@ export default function QuizGenerate() {
                         <img
                           width="96"
                           height="96"
-                          src="https://img.icons8.com/material-outlined/9d50e9/96/pdf-2.png"
+                          src="https://img.icons8.com/material-outlined/3848a8/96/pdf-2.png"
                           alt="pdf-2"
                         />
                         <p className="text-xl">
                           Drag and drop a{" "}
-                          <span className="font-bold text-purple-500">
+                          <span className="font-bold text-indigo-600">
                             PDF file
                           </span>{" "}
                           here,
                         </p>
                         <p className="text-sm">
                           or{" "}
-                          <span className="text-purple-500 underline">
+                          <span className="text-indigo-600 underline">
                             browse files
                           </span>{" "}
                           on your computer{" "}

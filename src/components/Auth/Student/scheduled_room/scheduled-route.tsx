@@ -69,8 +69,8 @@ const ScheduledQuizInfo: React.FC<{
 
   return (
     <div className="flex flex-col items-center justify-center space-y-6 text-center">
-      <Calendar className="h-8 w-8 text-purple-500" />
-      <h1 className="text-3xl font-bold text-purple-500">{quizData.title}</h1>
+      <Calendar className="h-8 w-8 text-indigo-500" />
+      <h1 className="text-3xl font-bold text-indigo-500">{quizData.title}</h1>
       <div className="space-y-2">
         <p className="text-gray-600">
           Opens: {new Date(quizData.openTime).toLocaleString()}

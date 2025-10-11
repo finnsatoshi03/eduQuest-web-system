@@ -7,7 +7,7 @@ interface LobbyProps {
 export default function Lobby({ onLeave }: LobbyProps) {
   return (
     <div className="flex h-[calc(100%-5rem)] flex-col items-center justify-center">
-      <h1 className="mb-5 text-7xl font-bold uppercase text-purple-800 md:text-9xl">
+      <h1 className="mb-5 text-7xl font-bold uppercase text-indigo-800 md:text-9xl">
         Game Lobby
       </h1>
       <div className="w-full max-w-md space-y-4">
