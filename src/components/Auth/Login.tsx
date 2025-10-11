@@ -1,11 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/contexts/AuthProvider";
 import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import ReCAPTCHA from "react-google-recaptcha";
+// import ReCAPTCHA from "react-google-recaptcha";
 import toast from "react-hot-toast";
 import { Sparkles, LogIn, Mail, Lock, Loader2, Trophy } from "lucide-react";
 
@@ -41,8 +41,8 @@ const itemVariants = {
 
 const Login: React.FC = () => {
   const { login, googleLogin } = useAuth();
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  // const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  // const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -53,9 +53,9 @@ const Login: React.FC = () => {
     },
   });
 
-  const onRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token);
-  };
+  // const onRecaptchaChange = (token: string | null) => {
+  //   setRecaptchaToken(token);
+  // };
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     // if (!recaptchaToken) {
@@ -68,8 +68,8 @@ const Login: React.FC = () => {
       await login(data.email, data.password);
       toast.success("🎉 Welcome back! Let's crush some quizzes!");
 
-      recaptchaRef.current?.reset();
-      setRecaptchaToken(null);
+      // recaptchaRef.current?.reset();
+      // setRecaptchaToken(null);
     } catch (err: unknown) {
       if (err instanceof Error) {
         toast.error(`❌ ${err.message}`);
@@ -82,10 +82,10 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleSignIn = async () => {
-    if (!recaptchaToken) {
-      toast.error("🤖 Please complete the reCAPTCHA verification!");
-      return;
-    }
+    // if (!recaptchaToken) {
+    //   toast.error("🤖 Please complete the reCAPTCHA verification!");
+    //   return;
+    // }
 
     try {
       await googleLogin();
@@ -175,13 +175,13 @@ const Login: React.FC = () => {
                 )}
               />
 
-              <div className="flex justify-center pt-2">
+              {/* <div className="flex justify-center pt-2">
                 <ReCAPTCHA
                   ref={recaptchaRef}
                   sitekey={import.meta.env.VITE_GOOGLE_RECAPTCHA_SITE_KEY}
                   onChange={onRecaptchaChange}
                 />
-              </div>
+              </div> */}
 
               <Button
                 type="submit"

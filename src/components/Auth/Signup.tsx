@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
-import ReCAPTCHA from "react-google-recaptcha";
+// import ReCAPTCHA from "react-google-recaptcha";
 import { Sparkles, Rocket, Mail, Lock, Loader2 } from "lucide-react";
 
 import {
@@ -46,8 +46,8 @@ const itemVariants = {
 const Signup: React.FC = () => {
   const { signUp, googleSignUp } = useAuth();
   const navigate = useNavigate();
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  // const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  // const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -58,9 +58,9 @@ const Signup: React.FC = () => {
     },
   });
 
-  const onRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token);
-  };
+  // const onRecaptchaChange = (token: string | null) => {
+  //   setRecaptchaToken(token);
+  // };
 
   const verifyEmail = async (email: string) => {
     const url = `https://mailcheck.p.rapidapi.com/?domain=${email}`;
@@ -105,8 +105,8 @@ const Signup: React.FC = () => {
       );
       navigate("/email-verification", { state: { email: data.email } });
 
-      recaptchaRef.current?.reset();
-      setRecaptchaToken(null);
+      // recaptchaRef.current?.reset();
+      // setRecaptchaToken(null);
     } catch (err: unknown) {
       if (err instanceof Error) {
         toast.error(`❌ ${err.message}`);
@@ -119,10 +119,10 @@ const Signup: React.FC = () => {
   };
 
   const handleGoogleSignIn = async () => {
-    if (!recaptchaToken) {
-      toast.error("🤖 Please complete the reCAPTCHA verification!");
-      return;
-    }
+    // if (!recaptchaToken) {
+    //   toast.error("🤖 Please complete the reCAPTCHA verification!");
+    //   return;
+    // }
 
     try {
       await googleSignUp();
@@ -264,13 +264,13 @@ const Signup: React.FC = () => {
                 )}
               />
 
-              <div className="flex justify-center pt-2">
+              {/* <div className="flex justify-center pt-2">
                 <ReCAPTCHA
                   ref={recaptchaRef}
                   sitekey={import.meta.env.VITE_GOOGLE_RECAPTCHA_SITE_KEY}
                   onChange={onRecaptchaChange}
                 />
-              </div>
+              </div> */}
 
               <Button
                 type="submit"
