@@ -83,10 +83,10 @@ const Signup: React.FC = () => {
   };
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    if (!recaptchaToken) {
-      toast.error("🤖 Please complete the reCAPTCHA verification!");
-      return;
-    }
+    // if (!recaptchaToken) {
+    //   toast.error("🤖 Please complete the reCAPTCHA verification!");
+    //   return;
+    // }
 
     setIsSigningUp(true);
 
