@@ -9,7 +9,7 @@ export default function Recap() {
             Play
           </div>
           <div className="rounded-xl border-2 border-white bg-white px-4 py-1 font-black tracking-tight text-indigo-600 shadow-[0px_4px_0px_#c7d2fe] md:px-6">
-            EduQuest
+            Quiz Royale
           </div>
           <div className="rounded-full border-2 border-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white md:px-4">
             Win

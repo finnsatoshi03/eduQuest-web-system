@@ -147,7 +147,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
   return (
     <div className="my-2 flex gap-4 rounded border p-3">
       <img
-        src={quiz.cover_image || "/edu-quest-logo.png"}
+        src={quiz.cover_image || "/quiz-royale-logo.png"}
         alt={quiz.title}
         className={`hidden h-28 object-cover md:block ${!quiz.cover_image && "rounded bg-zinc-100 p-2 dark:bg-zinc-800"}`}
       />

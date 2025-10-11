@@ -136,16 +136,16 @@ export default function ContactPage() {
             </p>
             <div className="space-y-2">
               <a
-                href="mailto:hello@eduquest.com"
+                href="mailto:hello@quiz-royale.com"
                 className="block text-sm font-semibold text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 md:text-base"
               >
-                hello@eduquest.com
+                hello@quiz-royale.com
               </a>
               <a
-                href="mailto:support@eduquest.com"
+                href="mailto:support@quiz-royale.com"
                 className="block text-sm font-semibold text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 md:text-base"
               >
-                support@eduquest.com
+                support@quiz-royale.com
               </a>
             </div>
           </motion.div>

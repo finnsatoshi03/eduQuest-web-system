@@ -114,7 +114,7 @@ const Login: React.FC = () => {
               Ready for another challenge? Let's go!
             </p>
             <div className="flex items-center gap-1 text-sm">
-              <span className="opacity-60">New to EduQuest?</span>
+              <span className="opacity-60">New to Quiz Royale?</span>
               <NavLink to="/signup">
                 <Button
                   variant="link"
@@ -300,8 +300,8 @@ const Login: React.FC = () => {
 
         <div className="rounded-3xl border-2 border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-900/20">
           <p className="text-center text-sm font-semibold italic">
-            "EduQuest turned studying into my favorite game. I've never learned
-            so much while having this much fun!" 🎮
+            "Quiz Royale turned studying into my favorite game. I've never
+            learned so much while having this much fun!" 🎮
           </p>
           <p className="mt-2 text-center text-xs opacity-70">— Alex, Student</p>
         </div>

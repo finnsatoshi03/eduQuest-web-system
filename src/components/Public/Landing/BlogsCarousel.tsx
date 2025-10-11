@@ -32,8 +32,8 @@ export function BlogCarousel() {
           📚
         </h2>
         <p className="max-w-lg text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 md:text-base">
-          Pro tips, power moves, and insider secrets to master EduQuest. Learn
-          how to create quizzes that students can't stop playing!
+          Pro tips, power moves, and insider secrets to master Quiz Royale.
+          Learn how to create quizzes that students can't stop playing!
         </p>
       </div>
       <Carousel items={cards} />

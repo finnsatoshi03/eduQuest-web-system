@@ -142,8 +142,8 @@ export default function Navbar() {
             className="flex items-center gap-2"
           >
             <img
-              src="/edu-quest-logo.png"
-              alt="EduQuest Logo"
+              src="/quiz-royale-logo.png"
+              alt="Quiz Royale Logo"
               className="w-12 md:w-14"
             />
           </NavLink>

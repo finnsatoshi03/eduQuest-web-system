@@ -78,9 +78,9 @@ export default function FAQPage() {
           </span>
         </h1>
         <p className="mx-auto max-w-2xl text-sm leading-relaxed opacity-80 md:text-base">
-          We've got answers! Here's everything you need to know about EduQuest.
-          Can't find what you're looking for? Hit us up—we're always happy to
-          help! 💬
+          We've got answers! Here's everything you need to know about Quiz
+          Royale. Can't find what you're looking for? Hit us up—we're always
+          happy to help! 💬
         </p>
       </motion.div>
 
@@ -142,7 +142,7 @@ export default function FAQPage() {
         </h2>
         <p className="text-sm opacity-90 md:text-base">
           No worries! Our team is here to help. Shoot us a message and we'll get
-          back to you faster than you can say "EduQuest"!
+          back to you faster than you can say "Quiz Royale"!
         </p>
         <a
           href="/contact"
@@ -163,7 +163,7 @@ const faqData = [
     value: "student-1",
     question: "How do I join a quiz game?",
     answer:
-      "Easy peasy! Your teacher will give you a game code. Just head to EduQuest, enter the code, pick your nickname (make it epic!), and you're in! Ready, set, quiz! 🎮",
+      "Easy peasy! Your teacher will give you a game code. Just head to Quiz Royale, enter the code, pick your nickname (make it epic!), and you're in! Ready, set, quiz! 🎮",
   },
   {
     category: "students",
@@ -184,14 +184,14 @@ const faqData = [
     value: "student-4",
     question: "Can I play on my phone?",
     answer:
-      "Absolutely! EduQuest works on phones, tablets, laptops—pretty much anything with a screen. Learn anywhere, anytime. No excuses! 📱",
+      "Absolutely! Quiz Royale works on phones, tablets, laptops—pretty much anything with a screen. Learn anywhere, anytime. No excuses! 📱",
   },
 
   // For Teachers
   {
     category: "teachers",
     value: "teacher-1",
-    question: "How do I create a quiz with EduQuest?",
+    question: "How do I create a quiz with Quiz Royale?",
     answer:
       "Super simple! Upload your PDF or doc, let our AI work its magic, review the auto-generated questions (and tweak if needed), then launch! The whole process takes less time than making coffee. ☕",
   },
@@ -258,7 +258,7 @@ const faqData = [
   {
     category: "account",
     value: "account-1",
-    question: "Is my data safe on EduQuest?",
+    question: "Is my data safe on Quiz Royale?",
     answer:
       "100%! We use bank-level encryption to protect your data. We never sell your info, and everything follows strict privacy standards. Your trust is our top priority. 🔒",
   },

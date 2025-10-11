@@ -57,7 +57,7 @@ const features = [
     icon: Users,
     title: "Built for Everyone",
     description:
-      "Whether you're teaching kindergarten or college, EduQuest adapts to your needs.",
+      "Whether you're teaching kindergarten or college, Quiz Royale adapts to your needs.",
     color: "text-teal-600",
     bgColor: "bg-teal-100 dark:bg-teal-900/20",
   },
@@ -76,7 +76,7 @@ const AboutPage: React.FC = () => {
         <motion.div className="mb-4 flex items-center justify-center gap-2">
           <Sparkles className="size-6 text-amber-500" />
           <span className="text-sm font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
-            About EduQuest
+            About Quiz Royale
           </span>
           <Sparkles className="size-6 text-amber-500" />
         </motion.div>
@@ -264,7 +264,7 @@ const AboutPage: React.FC = () => {
             Join the Quest! 🎮
           </h2>
           <p className="mx-auto max-w-2xl text-sm leading-relaxed opacity-90 md:text-lg">
-            Whether you're teaching elementary school or college, EduQuest is
+            Whether you're teaching elementary school or college, Quiz Royale is
             built to make your life easier and your students more engaged. Start
             creating quizzes that students actually want to take!
           </p>

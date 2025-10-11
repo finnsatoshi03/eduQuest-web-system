@@ -125,7 +125,7 @@ export default function Header() {
       >
         <motion.p className="relative z-20 opacity-90">
           {splitText(
-            "Transform any lesson into an epic quest! EduQuest uses AI magic to create interactive quizzes that make learning feel like play. Upload, generate, and watch your students compete for glory!",
+            "Transform any lesson into an epic quest! Quiz Royale uses AI magic to create interactive quizzes that make learning feel like play. Upload, generate, and watch your students compete for glory!",
           )}
         </motion.p>
       </motion.div>
