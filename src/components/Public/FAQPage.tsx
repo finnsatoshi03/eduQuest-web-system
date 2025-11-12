@@ -161,67 +161,88 @@ const faqData = [
   {
     category: "students",
     value: "student-1",
-    question: "How do I join a quiz game?",
+    question: "How do I join a quiz?",
     answer:
-      "Easy peasy! Your teacher will give you a game code. Just head to Quiz Royale, enter the code, pick your nickname (make it epic!), and you're in! Ready, set, quiz! 🎮",
+      "Your teacher will give you a unique class code (36 characters). Enter the code on your student dashboard, choose a display name, and you're in! You can join both live quiz games and scheduled quizzes. 🎮",
   },
   {
     category: "students",
     value: "student-2",
     question: "Do I need to create an account?",
     answer:
-      "Nope! For playing quizzes, you just need a game code from your teacher. But if you want to track your progress and climb those leaderboards, signing up is the way to go! 🏆",
+      "Yes! You'll need to sign up with an email and verify your account. After signing up, choose your role as a student, and you'll have access to your dashboard where you can enter class codes to join quizzes. 📝",
   },
   {
     category: "students",
     value: "student-3",
-    question: "How do leaderboards work?",
+    question: "What's the difference between live and scheduled quizzes?",
     answer:
-      "The faster you answer correctly, the more points you score! Race to the top of the leaderboard and show everyone who's boss. Speed + accuracy = victory! ⚡",
+      "Live quizzes happen in real-time—you join a lobby, wait for your teacher to start, and play together with your classmates. Scheduled quizzes have set opening and closing times, so you can take them anytime within that window. ⏰",
   },
   {
     category: "students",
     value: "student-4",
+    question: "How do leaderboards work?",
+    answer:
+      "In live quizzes, points are based on speed and accuracy! Answer correctly and quickly to score higher. The leaderboard updates in real-time so you can see how you stack up against your classmates. 🏆",
+  },
+  {
+    category: "students",
+    value: "student-5",
+    question: "Can I retake a scheduled quiz?",
+    answer:
+      "It depends! Your teacher can enable retakes when setting up the quiz. If retakes are allowed, you can take the quiz multiple times within the scheduled time window. 🔄",
+  },
+  {
+    category: "students",
+    value: "student-6",
     question: "Can I play on my phone?",
     answer:
-      "Absolutely! Quiz Royale works on phones, tablets, laptops—pretty much anything with a screen. Learn anywhere, anytime. No excuses! 📱",
+      "Absolutely! Quiz Royale works on phones, tablets, and laptops. Just make sure you have a stable internet connection for the best experience. 📱",
   },
 
   // For Teachers
   {
     category: "teachers",
     value: "teacher-1",
-    question: "How do I create a quiz with Quiz Royale?",
+    question: "How do I create a quiz?",
     answer:
-      "Super simple! Upload your PDF or doc, let our AI work its magic, review the auto-generated questions (and tweak if needed), then launch! The whole process takes less time than making coffee. ☕",
+      "Click 'Create Quiz' on your dashboard, upload a PDF file, choose your question type (Multiple Choice, True/False, or Identification), select how many questions to generate, and our AI does the rest! Then customize, preview, and you're ready to go. ✨",
   },
   {
     category: "teachers",
     value: "teacher-2",
     question: "Can I edit AI-generated questions?",
     answer:
-      "Of course! Our AI is smart, but you're the expert. Review, edit, add, or remove any questions before going live. You're always in control! ✏️",
+      "Absolutely! After questions are generated, you can edit, add, or delete any question. Change the text, answers, time limits, point values, and even add images. You have full control! ✏️",
   },
   {
     category: "teachers",
     value: "teacher-3",
     question: "What file formats are supported?",
     answer:
-      "We support PDFs, Word docs (.docx), and plain text files. As long as it's got words, we can work with it! Planning to add more formats soon. 📄",
+      "Currently, we support PDF files for AI-based question generation. Upload your course materials, lecture notes, or study guides in PDF format, and our system will extract content to create relevant questions. 📄",
   },
   {
     category: "teachers",
     value: "teacher-4",
-    question: "How do I track student performance?",
+    question: "What's the difference between live and scheduled quizzes?",
     answer:
-      "Your dashboard shows everything—individual scores, class averages, question analytics, and more. See who's crushing it and who needs extra help. Data-driven teaching FTW! 📊",
+      "Live quizzes happen in real-time—students join a lobby and you control when each question appears. Scheduled quizzes open and close at specific times you set, allowing students to take them independently within that window. Both options are perfect for different teaching scenarios! 🎯",
   },
   {
     category: "teachers",
     value: "teacher-5",
-    question: "Is there a limit to how many quizzes I can create?",
+    question: "How do I track student performance?",
     answer:
-      "Free accounts get 5 quizzes per month. Need more? Our Pro plan gives you unlimited quiz creation plus extra features. Check out our pricing page! 🚀",
+      "During live quizzes, see real-time leaderboards, accuracy charts, and question-by-question analytics. For scheduled quizzes, access detailed response data from your dashboard. View individual scores, class averages, and identify which questions were challenging. 📊",
+  },
+  {
+    category: "teachers",
+    value: "teacher-6",
+    question: "Can I reuse quizzes?",
+    answer:
+      "Yes! All your quizzes are saved in your dashboard. You can launch the same quiz multiple times for different classes or semesters. Each session creates a new unique class code. ♻️",
   },
 
   // Gameplay
@@ -230,57 +251,50 @@ const faqData = [
     value: "gameplay-1",
     question: "What types of questions can I create?",
     answer:
-      "Multiple choice, true/false, matching, and fill-in-the-blank. Mix and match to keep things interesting! More question types coming soon. 🎯",
+      "Quiz Royale supports three question types: Multiple Choice (pick the correct answer from options), True/False (simple binary questions), and Identification (fill-in-the-blank style answers). Each type can include images and custom point values! 🎯",
   },
   {
     category: "gameplay",
     value: "gameplay-2",
-    question: "Can students play quizzes multiple times?",
+    question: "How does the timer work?",
     answer:
-      "Teachers decide! You can allow retakes for practice or make it one-shot for high-stakes assessment. Flexibility is key! 🔄",
+      "Teachers set the time limit for each question individually (you can also disable timers for scheduled quizzes). In live quizzes, the countdown starts when the question appears. Answer quickly to score more points! ⏱️",
   },
   {
     category: "gameplay",
     value: "gameplay-3",
-    question: "How does the timer work?",
+    question: "Can I shuffle questions?",
     answer:
-      "Teachers set the time limit for each question (5-120 seconds). The clock starts when the question appears. Answer fast to max out your points! ⏱️",
+      "Yes! When setting up your quiz, enable the 'Shuffle Questions' option. This randomizes the question order for each student, helping reduce cheating and making each experience unique. 🔀",
   },
   {
     category: "gameplay",
     value: "gameplay-4",
-    question: "What happens if I lose connection during a game?",
+    question: "What happens if time runs out on a question?",
     answer:
-      "Don't panic! You'll have 60 seconds to reconnect. If you make it back, you'll jump right back in where you left off. We've got your back! 🌐",
+      "In live quizzes, unanswered questions are marked as incorrect and the game moves to the next question automatically. In scheduled quizzes, you can enable 'No Time Limit' mode where students can take as long as they need. ⏰",
   },
 
   // Account & Privacy
   {
     category: "account",
     value: "account-1",
-    question: "Is my data safe on Quiz Royale?",
+    question: "How do I sign up?",
     answer:
-      "100%! We use bank-level encryption to protect your data. We never sell your info, and everything follows strict privacy standards. Your trust is our top priority. 🔒",
+      "Click 'Sign Up', enter your email and password, then verify your email address. After verification, choose your role (student or teacher) and you're all set! You can also sign up with Google for faster access. 🚀",
   },
   {
     category: "account",
     value: "account-2",
-    question: "How do I reset my password?",
+    question: "Can I update my profile?",
     answer:
-      "Click 'Forgot Password' on the login page, enter your email, and we'll send you a reset link. Easy! Don't forget to check your spam folder. 📧",
+      "Yes! Go to your profile settings to update your display name, school, profile picture, and password. Your email address cannot be changed for security reasons. 👤",
   },
   {
     category: "account",
     value: "account-3",
-    question: "Can I delete my account?",
+    question: "Is my data safe?",
     answer:
-      "Yes, but we'll miss you! 😢 Go to Settings > Account > Delete Account. All your data will be permanently removed within 30 days. This can't be undone, so think carefully!",
-  },
-  {
-    category: "account",
-    value: "account-4",
-    question: "Do you comply with GDPR and COPPA?",
-    answer:
-      "Absolutely! We're fully compliant with GDPR, COPPA, and other major privacy regulations. Education + privacy = non-negotiable. ✅",
+      "Absolutely! We use Supabase for secure authentication and data storage. All passwords are encrypted, and we never share your personal information with third parties. Your uploaded course materials are used only to generate quiz questions. 🔒",
   },
 ];
