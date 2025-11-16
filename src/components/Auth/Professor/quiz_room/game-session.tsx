@@ -8,8 +8,12 @@ import LeaderboardTrendChart from "./leaderboard-trend-chart";
 import LiveQuestionChart from "./live-question-chart";
 import ClassAccuracy from "./class-accuracy";
 import { sendEndGame, sendExitLeaderboard } from "@/services/api/apiRoom";
-import { X } from "lucide-react";
+import { X, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { exportQuizResultsToExcel } from "@/services/api/apiExport";
+import toast from "react-hot-toast";
+import supabase from "@/services/supabase";
 
 interface GameSessionProps {
   currentQuestion: QuizQuestions;
@@ -39,6 +43,7 @@ const GameSession: React.FC<GameSessionProps> = ({
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("leaderboards");
   const [isGameEnded, setIsGameEnded] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -74,6 +79,39 @@ const GameSession: React.FC<GameSessionProps> = ({
     }
   };
 
+  const handleExport = async () => {
+    if (!classId) {
+      toast.error("No class code found");
+      return;
+    }
+
+    setIsExporting(true);
+    const loadingToast = toast.loading("Exporting quiz results...");
+
+    try {
+      // Fetch quiz ID from class code
+      const { data: quizData, error } = await supabase
+        .from("quiz")
+        .select("quiz_id")
+        .eq("class_code", classId)
+        .single();
+
+      if (error || !quizData) {
+        throw new Error("Quiz not found");
+      }
+
+      await exportQuizResultsToExcel(quizData.quiz_id, classId);
+      toast.success("Quiz results exported successfully!", {
+        id: loadingToast,
+      });
+    } catch (error) {
+      console.error("Error exporting quiz results:", error);
+      toast.error("Failed to export quiz results", { id: loadingToast });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div
       className={`relative flex flex-col items-center justify-center gap-8 text-center ${
@@ -83,12 +121,26 @@ const GameSession: React.FC<GameSessionProps> = ({
       }`}
     >
       {isGameEnded && (
-        <button
-          className="fixed left-6 top-24 z-10 rounded-md bg-slate-500 bg-opacity-10 p-1.5 hover:bg-opacity-20 md:left-12 lg:left-16"
-          onClick={() => endGame()}
-        >
-          <X />
-        </button>
+        <div className="fixed left-6 top-24 z-10 flex gap-2 md:left-12 lg:left-16">
+          <button
+            className="rounded-md bg-slate-500 bg-opacity-10 p-1.5 hover:bg-opacity-20"
+            onClick={() => endGame()}
+            title="Close and return to dashboard"
+          >
+            <X />
+          </button>
+          <Button
+            onClick={handleExport}
+            disabled={
+              isExporting || !leaderboardData || leaderboardData.length === 0
+            }
+            className="flex items-center gap-2"
+            size="sm"
+          >
+            <Download className="h-4 w-4" />
+            Export to Excel
+          </Button>
+        </div>
       )}
       <ClassAccuracy accuracy={classAccuracy} />
       {!isGameEnded && (

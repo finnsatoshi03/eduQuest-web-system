@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { useTheme } from "@/contexts/ThemeProvider";
 import { useMediaQuery } from "react-responsive";
 import { QuizQuestions, LeaderboardEntry } from "@/lib/types";
-import { submitAnswer, updateLeaderBoard } from "@/services/api/apiRoom";
+import { updateLeaderBoard } from "@/services/api/apiRoom";
+import { useQuizAnswer } from "@/hooks/useQuizAnswer";
 
 // Components
 import ProgressBar from "@/components/Shared/progressbar";
@@ -93,6 +94,9 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
   const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1024px)" });
 
   const currentQuestion = questions[currentQuestionIndex];
+
+  // Answer submission hook
+  const { submitAnswerAsync } = useQuizAnswer({ quizType: "scheduled" });
 
   // Fetch quiz settings and questions
   useEffect(() => {
@@ -242,11 +246,17 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
     setSelectedAnswer(answer);
     setHasAnswered(true);
 
-    const isCorrect = await submitAnswer(
-      currentQuestion.quiz_question_id,
-      user.id,
+    // Calculate time taken (total time - remaining time)
+    const timeTaken = (currentQuestion.time || 0) - timeLeft;
+
+    const isCorrect = await submitAnswerAsync({
+      questionId: currentQuestion.quiz_question_id,
+      studentId: user.id,
       answer,
-    );
+      quizId: quizId,
+      classCode: classCode,
+      timeTaken: timeTaken > 0 ? timeTaken : 0,
+    });
 
     const newScore = score + (isCorrect ? currentQuestion.points || 0 : 0);
     const newRightAns = rightAns + (isCorrect ? 1 : 0);

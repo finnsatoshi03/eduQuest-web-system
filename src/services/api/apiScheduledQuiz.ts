@@ -166,3 +166,85 @@ export async function checkQuizStatus(
     canRetake: quizData.retake || false,
   };
 }
+
+// Store individual answer for scheduled quiz
+export async function submitScheduledAnswer(
+  questionId: string,
+  studentId: string,
+  answer: string,
+  quizId: string,
+  classCode: string,
+  timeTaken: number = 0,
+): Promise<boolean> {
+  try {
+    // Get the correct answer from the database
+    const { data: questionData } = await supabase
+      .from("quiz_questions")
+      .select("right_answer")
+      .eq("quiz_question_id", questionId)
+      .single();
+
+    const isCorrect = questionData?.right_answer === answer;
+
+    // Get the quiz_students record for this student (includes id, name, email)
+    const { data: quizStudent } = await supabase
+      .from("quiz_students")
+      .select("id, student_name, student_email")
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+      })
+      .single();
+
+    // Store the individual answer in quiz_student_answers table
+    // Include student_name, student_email, and class_code for permanent storage
+    await supabase.from("quiz_student_answers").insert([
+      {
+        quiz_student_id: quizStudent?.id || studentId,
+        quiz_id: quizId,
+        quiz_question_id: questionId,
+        class_code: classCode, // Track which game session this answer belongs to
+        student_answer: answer,
+        is_correct: isCorrect,
+        time_taken: timeTaken,
+        answered_at: new Date().toISOString(),
+        student_name: quizStudent?.student_name || "Unknown",
+        student_email: quizStudent?.student_email || null,
+      },
+    ]);
+
+    console.log("Individual answer stored successfully for scheduled quiz");
+    return isCorrect;
+  } catch (error) {
+    console.error("Error storing individual answer for scheduled quiz:", error);
+    throw error;
+  }
+}
+
+// Update student's total score in quiz_students table
+export async function updateScheduledQuizScore(
+  classCode: string,
+  studentId: string,
+  score: number,
+  rightAns: number,
+  wrongAns: number,
+): Promise<void> {
+  try {
+    await supabase
+      .from("quiz_students")
+      .update({
+        score: score,
+        right_answer: rightAns,
+        wrong_answer: wrongAns,
+      })
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+      });
+
+    console.log("Scheduled quiz score updated successfully");
+  } catch (error) {
+    console.error("Error updating scheduled quiz score:", error);
+    throw error;
+  }
+}

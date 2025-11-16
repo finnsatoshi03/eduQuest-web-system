@@ -11,6 +11,7 @@ export function useLeaderboard(classId: string) {
 
   useEffect(() => {
     let subscription: any;
+    let retryTimeout: NodeJS.Timeout;
 
     const fetchInitialData = async () => {
       try {
@@ -40,6 +41,7 @@ export function useLeaderboard(classId: string) {
             filter: `class_code=eq.${classId}`,
           },
           (payload) => {
+            console.log("📊 Leaderboard update received:", payload);
             setLeaderboardData((currentData: LeaderboardEntry[]) => {
               let updatedData = [...currentData];
               const index = updatedData.findIndex(
@@ -65,7 +67,26 @@ export function useLeaderboard(classId: string) {
             });
           },
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === "SUBSCRIBED") {
+            console.log("✅ Realtime subscription connected successfully");
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("❌ Realtime subscription error:", err);
+            toast.error("Live updates disconnected. Retrying...");
+
+            // Retry connection after 3 seconds
+            retryTimeout = setTimeout(() => {
+              console.log("🔄 Retrying realtime subscription...");
+              setupRealtimeSubscription();
+            }, 3000);
+          } else if (status === "TIMED_OUT") {
+            console.error("⏱️ Realtime subscription timed out");
+            toast.error("Connection timed out. Refreshing...");
+            fetchInitialData(); // Fallback to polling
+          } else {
+            console.log("🔌 Subscription status:", status);
+          }
+        });
     };
 
     if (classId) {
@@ -76,6 +97,9 @@ export function useLeaderboard(classId: string) {
     return () => {
       if (subscription) {
         supabase.removeChannel(subscription);
+      }
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
       }
     };
   }, [classId]);

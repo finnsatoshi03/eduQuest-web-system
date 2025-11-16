@@ -34,6 +34,8 @@ import {
 } from "@/services/api/apiQuiz";
 import { Quiz, User } from "@/lib/types";
 import toast from "react-hot-toast";
+import { useProfessorOverallStats } from "@/hooks/useProfessorAnalytics";
+import OverallStatsCards from "./Dashboard/OverallStatsCards";
 
 interface QuizCardProps {
   quiz: Quiz;
@@ -327,6 +329,10 @@ export default function ProfessorDashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { quizzes = [], isPending, isError } = useGetQuizzes();
+  const {
+    data: overallStats,
+    isLoading: isLoadingStats,
+  } = useProfessorOverallStats(user?.id);
 
   const safeQuizzes: Quiz[] = Array.isArray(quizzes) ? quizzes : [quizzes];
 
@@ -369,6 +375,15 @@ export default function ProfessorDashboard() {
 
   return (
     <div className="p-4">
+      {/* Analytics Overview Section */}
+      {!isLoadingStats && overallStats && (
+        <div className="mb-6">
+          <h2 className="mb-4 text-2xl font-bold">Dashboard Overview</h2>
+          <OverallStatsCards stats={overallStats} />
+        </div>
+      )}
+
+      {/* Quiz Management Tabs */}
       <Tabs defaultValue="active-quizzes">
         <div className="flex justify-between">
           <TabsList>

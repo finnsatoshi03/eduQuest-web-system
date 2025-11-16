@@ -10,10 +10,10 @@ import {
   gameEventHandler,
   getQuizQuestionsStud,
   updateLeaderBoard,
-  submitAnswer,
   joinRoom,
   getExitLeaderboard,
 } from "@/services/api/apiRoom";
+import { useQuizAnswer } from "@/hooks/useQuizAnswer";
 
 // Components
 import ProgressBar from "@/components/Shared/progressbar";
@@ -94,6 +94,9 @@ const SGameLobby: React.FC = () => {
   const isTabletOrMobile = useMediaQuery({ query: "(max-width: 1024px)" });
 
   const currentQuestion = questions[currentQuestionIndex];
+
+  // Answer submission hook
+  const { submitAnswerAsync } = useQuizAnswer({ quizType: "live" });
 
   const initializeLeaderboard = useCallback(async () => {
     if (classId && user) {
@@ -275,16 +278,22 @@ const SGameLobby: React.FC = () => {
   };
 
   const handleAnswer = async (answer: string) => {
-    if (!currentQuestion || !user || hasAnswered) return;
+    if (!currentQuestion || !user || hasAnswered || !classId) return;
 
     setSelectedAnswer(answer);
     setHasAnswered(true);
 
-    const isCorrect = await submitAnswer(
-      currentQuestion.quiz_question_id,
-      user.id,
+    // Calculate time taken (total time - remaining time)
+    const timeTaken = (currentQuestion.time || 0) - timeLeft;
+
+    const isCorrect = await submitAnswerAsync({
+      questionId: currentQuestion.quiz_question_id,
+      studentId: user.id,
       answer,
-    );
+      quizId: currentQuestion.quiz_id,
+      classCode: classId,
+      timeTaken: timeTaken > 0 ? timeTaken : 0,
+    });
 
     let newScore = score;
     let newRightAns = rightAns;

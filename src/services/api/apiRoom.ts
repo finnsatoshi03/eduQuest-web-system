@@ -464,19 +464,99 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
   // End the game logic
   endGame(classCode);
 
-  // Remove students associated with the classCode from the quiz_students table
-  const { error } = await supabase
-    .from("quiz_students")
-    .delete()
-    .eq("class_code", classCode);
+  try {
+    console.log("🔄 Starting game end process for class:", classCode);
 
-  // Handle any errors during deletion
-  if (error) {
-    console.error("Error removing students from quiz_students table:", error);
+    // STEP 1: Copy quiz_students data to quiz_history BEFORE deleting
+    const { data: quizStudents, error: fetchError } = await supabase
+      .from("quiz_students")
+      .select("*")
+      .eq("class_code", classCode);
+
+    if (fetchError) {
+      console.error("❌ Error fetching quiz students:", fetchError);
+      return false;
+    }
+
+    console.log(`📊 Found ${quizStudents?.length || 0} students to save to history`);
+
+    if (quizStudents && quizStudents.length > 0) {
+      // Get quiz_id from class_code
+      const { data: quizData, error: quizError } = await supabase
+        .from("quiz")
+        .select("quiz_id")
+        .eq("class_code", classCode)
+        .single();
+
+      if (quizError) {
+        console.error("❌ Error fetching quiz data:", quizError);
+        return false;
+      }
+
+      const quizId = quizData?.quiz_id;
+      console.log("📝 Quiz ID:", quizId);
+
+      // Prepare history records
+      const historyRecords = quizStudents.map((student) => ({
+        quiz_id: quizId,
+        class_code: classCode,
+        quiz_student_id: student.quiz_student_id,
+        student_name: student.student_name,
+        student_email: student.student_email,
+        student_avatar: student.student_avatar,
+        score: student.score || 0,
+        right_answer: student.right_answer || 0,
+        wrong_answer: student.wrong_answer || 0,
+        placement: student.placement || 0,
+        quiz_taken: true,
+        completed_at: new Date().toISOString(),
+      }));
+
+      console.log("💾 Attempting to save to quiz_history table...");
+
+      // Insert into quiz_history
+      const { error: insertError } = await supabase
+        .from("quiz_history")
+        .insert(historyRecords);
+
+      if (insertError) {
+        console.error("❌ CRITICAL: Failed to save quiz history!");
+        console.error("Error details:", insertError);
+
+        // Check for specific error codes
+        if (insertError.code === "42501") {
+          console.error("🔒 RLS POLICY ERROR: Row Level Security is blocking inserts to quiz_history");
+          console.error("FIX: Run migration_fix_rls_policies.sql in Supabase SQL Editor");
+        } else if (insertError.code === "42P01") {
+          console.error("📋 TABLE ERROR: quiz_history table doesn't exist");
+          console.error("FIX: Run migration_quiz_history.sql in Supabase SQL Editor");
+        } else {
+          console.error("⚠️ UNKNOWN ERROR - Check Supabase logs for more details");
+        }
+        // Continue anyway - don't fail the game end
+      } else {
+        console.log(`✅ Successfully saved ${historyRecords.length} quiz results to history`);
+      }
+    } else {
+      console.log("⚠️ No students found to save to history");
+    }
+
+    // STEP 2: Now safe to delete quiz_students (answers are preserved)
+    const { error: deleteError } = await supabase
+      .from("quiz_students")
+      .delete()
+      .eq("class_code", classCode);
+
+    if (deleteError) {
+      console.error("Error removing students from quiz_students table:", deleteError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in sendEndGame:", error);
     return false;
   }
-
-  return true;
 }
 
 export async function getEndGame(
@@ -764,13 +844,83 @@ export async function updateLeaderBoard(
   }
 }
 
-// Answer submission function
+// Answer submission function with individual answer tracking
 export async function submitAnswer(
   questionId: string,
-  _studentId: string,
+  studentId: string,
   answer: string,
+  quizId: string,
+  classCode: string,
+  timeTaken: number = 0,
 ): Promise<boolean> {
   const isCorrect = await checkAnswer(questionId, answer);
   console.log("Answer is correct:", isCorrect);
+
+  try {
+    // Get the quiz_students record for this student (includes id, name, email)
+    const { data: quizStudent, error: fetchError } = await supabase
+      .from("quiz_students")
+      .select("id, student_name, student_email")
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+      })
+      .single();
+
+    if (fetchError) {
+      console.error("❌ Error fetching quiz student:", fetchError);
+    }
+
+    if (!quizStudent) {
+      console.error("❌ Quiz student record not found for:", { studentId, classCode });
+    }
+
+    // Store the individual answer in quiz_student_answers table
+    // Include student_name, student_email, and class_code for permanent storage
+    const { error: insertError } = await supabase
+      .from("quiz_student_answers")
+      .insert([
+        {
+          quiz_student_id: quizStudent?.id || studentId,
+          quiz_id: quizId,
+          quiz_question_id: questionId,
+          class_code: classCode, // Track which game session this answer belongs to
+          student_answer: answer,
+          is_correct: isCorrect,
+          time_taken: timeTaken,
+          answered_at: new Date().toISOString(),
+          student_name: quizStudent?.student_name || "Unknown",
+          student_email: quizStudent?.student_email || null,
+        },
+      ]);
+
+    if (insertError) {
+      console.error("❌ CRITICAL: Failed to store answer in database!");
+      console.error("Error details:", insertError);
+
+      // Check for specific error codes
+      if (insertError.code === "42501") {
+        console.error("🔒 RLS POLICY ERROR: Row Level Security is blocking inserts");
+        console.error("FIX: Run migration_fix_rls_policies.sql in Supabase SQL Editor");
+        console.error("This will create permissive policies for authenticated users");
+      } else if (insertError.code === "42703") {
+        console.error("📋 COLUMN ERROR: Missing column in quiz_student_answers table");
+        console.error("Error message:", insertError.message);
+        if (insertError.message?.includes("class_code")) {
+          console.error("🔧 FIX: Run migration_add_class_code_to_answers.sql in Supabase SQL Editor");
+        } else {
+          console.error("🔧 FIX: Run migration_quiz_answers_student_info.sql in Supabase SQL Editor");
+        }
+      } else {
+        console.error("⚠️ UNKNOWN ERROR - Check Supabase logs for more details");
+      }
+    } else {
+      console.log("✅ Answer stored successfully with class_code:", classCode);
+    }
+  } catch (error) {
+    console.error("❌ Exception storing individual answer:", error);
+    // Don't throw - we still want to return the isCorrect result
+  }
+
   return isCorrect;
 }
