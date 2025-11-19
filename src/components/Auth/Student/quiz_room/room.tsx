@@ -287,11 +287,37 @@ const SGameLobby: React.FC = () => {
   }, [gameStart]);
 
   const handleTimeUp = async () => {
-    if (!hasAnswered && currentQuestion && user) {
+    if (!hasAnswered && currentQuestion && user && classId) {
       setWrongAns((prev) => prev + 1);
-      await submitAnswer(currentQuestion.quiz_question_id, user.id, "");
       setEffect("noAnswer");
       noAnswerSound.current.play();
+
+      // Auto-submit unanswered question
+      try {
+        await submitAnswerAsync({
+          questionId: currentQuestion.quiz_question_id,
+          studentId: user.id,
+          answer: "", // Empty answer for timeout
+          quizId: currentQuestion.quiz_id,
+          classCode: classId,
+          timeTaken: currentQuestion.time || 0, // Max time for timeout
+        });
+        console.log("✅ Timeout answer auto-submitted successfully");
+      } catch (error) {
+        console.error("❌ Failed to auto-submit timeout answer:", error);
+        // Continue with game flow even if submission fails
+        // The error is logged for debugging but won't block progression
+      }
+
+      // Update answered questions to track timeout
+      setAnsweredQuestions([
+        ...answeredQuestions,
+        {
+          question: currentQuestion.question,
+          userAnswer: "No answer (timeout)",
+          correctAnswer: currentQuestion.right_answer,
+        },
+      ]);
     }
 
     setShowLeaderboard(true);

@@ -168,7 +168,7 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
         ...answeredQuestions,
         {
           question: currentQuestion.question,
-          userAnswer: "No answer",
+          userAnswer: "No answer (timeout)",
           correctAnswer: currentQuestion.right_answer,
         },
       ]);
@@ -176,7 +176,22 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
       const newAccuracy = (rightAns / (currentQuestionIndex + 1)) * 100;
       setUserAccuracy(newAccuracy);
 
-      await submitAnswer(currentQuestion.quiz_question_id, user.id, "");
+      // Auto-submit unanswered question with proper error handling
+      try {
+        await submitAnswerAsync({
+          questionId: currentQuestion.quiz_question_id,
+          studentId: user.id,
+          answer: "", // Empty answer for timeout
+          quizId: quizId,
+          classCode: classCode,
+          timeTaken: currentQuestion.time || 0, // Max time for timeout
+        });
+        console.log("✅ Scheduled quiz timeout answer auto-submitted successfully");
+      } catch (error) {
+        console.error("❌ Failed to auto-submit scheduled quiz timeout answer:", error);
+        // Continue with quiz flow even if submission fails
+        // The error is logged for debugging but won't block progression
+      }
 
       setTimeout(handleNextQuestion, 2000);
     }
