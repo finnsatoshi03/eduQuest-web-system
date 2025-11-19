@@ -23,9 +23,11 @@ import soundWrong from "/sounds/wrong-answer.mp3";
 import {
   getQuestionsForScheduledQuiz,
   updateQuizTaken,
+  finalizeStudentAttempt,
 } from "@/services/api/apiScheduledQuiz";
 import { getQuizById } from "@/services/api/apiQuiz";
 import { shuffleArray } from "@/lib/helpers";
+import supabase from "@/services/supabase";
 
 // Types
 type EffectType = "correct" | "wrong" | "noAnswer" | null;
@@ -73,6 +75,7 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
       correctAnswer: string;
     }[]
   >([]);
+  const [isResultsPending, setIsResultsPending] = useState(true);
 
   // Answer State
   const [answerInput, setAnswerInput] = useState<string[]>([]);
@@ -131,6 +134,42 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
     };
 
     fetchQuizAndQuestions();
+  }, [classCode]);
+
+  // Subscribe to quiz status changes to detect finalization
+  useEffect(() => {
+    if (!classCode) return;
+
+    const channel = supabase
+      .channel(`quiz-status-student:${classCode}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "quiz",
+          filter: `class_code=eq.${classCode}`,
+        },
+        (payload) => {
+          const newStatus = (payload.new as any).status;
+          console.log("📊 Quiz status update received:", newStatus);
+          
+          // If quiz is finalized, update pending status
+          if (
+            newStatus === "scheduled-completed" ||
+            newStatus === "active"
+          ) {
+            setIsResultsPending(false);
+            // Optionally show a notification
+            console.log("✅ Quiz finalized! Results are now available.");
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [classCode]);
 
   // Timer effect - only run if not a no_time quiz
@@ -246,6 +285,33 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
         ) ?? -1;
       setUserRank(userIndex + 1);
 
+      // Check if quiz is finalized to determine if results are pending
+      let resultsPending = true;
+      try {
+        const { data: quizData } = await supabase
+          .from("quiz")
+          .select("status")
+          .eq("class_code", classCode)
+          .single();
+
+        // Results are pending if quiz is not yet finalized
+        resultsPending =
+          quizData?.status !== "scheduled-completed" &&
+          quizData?.status !== "active";
+
+        setIsResultsPending(resultsPending);
+
+        // CRITICAL: Finalize student's attempt to ensure it appears in history
+        // This copies data from quiz_students → quiz_history
+        console.log("🔄 Finalizing student attempt for scheduled quiz...");
+        await finalizeStudentAttempt(classCode, user.id);
+        console.log("✅ Student attempt finalized - data will appear in dashboard");
+      } catch (error) {
+        console.error("❌ Failed to finalize student attempt:", error);
+        // Don't block the UI flow - continue showing results
+        // The finalization can be retried or done by professor later
+      }
+
       setShowLeaderboard(true);
 
       setTimeout(() => {
@@ -352,6 +418,8 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
           rank={userRank}
           questions={answeredQuestions}
           onFinish={onComplete}
+          isScheduledQuiz={true}
+          isResultsPending={isResultsPending}
         />
       </>
     );

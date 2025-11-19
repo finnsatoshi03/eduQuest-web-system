@@ -108,13 +108,16 @@ export async function getQuizById(classCode: string) {
 /**
  * Check if a scheduled quiz can be accessed without modifying its state
  * Returns status information and validation results
+ *
+ * CRITICAL: Scheduled quizzes with current_session_id are considered "active"
+ * even though their status remains "scheduled" to differentiate from live quizzes
  */
 export async function checkScheduledQuizAccess(
   classCode: string,
 ): Promise<ScheduledQuizStatus> {
   const { data: quizData, error: quizError } = await supabase
     .from("quiz")
-    .select("quiz_id, status, open_time, close_time")
+    .select("quiz_id, status, open_time, close_time, current_session_id")
     .eq("class_code", classCode)
     .single();
 
@@ -126,8 +129,26 @@ export async function checkScheduledQuizAccess(
   const openTime = quizData.open_time ? new Date(quizData.open_time) : null;
   const closeTime = quizData.close_time ? new Date(quizData.close_time) : null;
 
-  // Check if quiz is scheduled but not yet started by professor
-  if (quizData.status === QUIZ_STATUS.SCHEDULED) {
+  // Check if quiz is scheduled (including completed scheduled quizzes)
+  if (
+    quizData.status === QUIZ_STATUS.SCHEDULED ||
+    quizData.status === QUIZ_STATUS.SCHEDULED_COMPLETED
+  ) {
+    // Completed scheduled quizzes are not accessible for new participation
+    if (quizData.status === QUIZ_STATUS.SCHEDULED_COMPLETED) {
+      return {
+        status: QUIZ_STATUS.SCHEDULED_COMPLETED,
+        isOpen: false,
+        message:
+          "This scheduled quiz has been completed. You can view your results in your dashboard.",
+        openTime: openTime || undefined,
+        closeTime: closeTime || undefined,
+      };
+    }
+
+    // Check if professor has started the quiz (has session_id)
+    const isStarted = !!quizData.current_session_id;
+
     if (openTime && now < openTime) {
       return {
         status: QUIZ_STATUS.SCHEDULED,
@@ -148,17 +169,30 @@ export async function checkScheduledQuizAccess(
       };
     }
 
-    // Quiz is within time window but still scheduled - needs professor to start
-    return {
-      status: QUIZ_STATUS.SCHEDULED,
-      isOpen: false,
-      message: "This quiz is scheduled. Please wait for the professor to start it.",
-      openTime: openTime || undefined,
-      closeTime: closeTime || undefined,
-    };
+    // Quiz is within time window
+    if (isStarted) {
+      // Professor has started the quiz - students can participate
+      return {
+        status: QUIZ_STATUS.SCHEDULED,
+        isOpen: true,
+        message: "Quiz is active. You can participate now.",
+        openTime: openTime || undefined,
+        closeTime: closeTime || undefined,
+      };
+    } else {
+      // Quiz is scheduled but professor hasn't started it yet
+      return {
+        status: QUIZ_STATUS.SCHEDULED,
+        isOpen: false,
+        message:
+          "This quiz is scheduled. Please wait for the professor to start it.",
+        openTime: openTime || undefined,
+        closeTime: closeTime || undefined,
+      };
+    }
   }
 
-  // Quiz is in game - students can participate
+  // Quiz is in game (live quiz) - students can participate
   if (quizData.status === QUIZ_STATUS.IN_GAME) {
     return {
       status: QUIZ_STATUS.IN_GAME,
@@ -178,7 +212,8 @@ export async function checkScheduledQuizAccess(
 
 /**
  * Start a scheduled quiz (called by professor)
- * Changes status from "scheduled" to "in game" and creates session_id
+ * Preserves "scheduled" status and creates session_id for participation tracking
+ * Scheduled quizzes remain "scheduled" throughout participation to differentiate from live quizzes
  */
 export async function startScheduledQuiz(
   classCode: string,
@@ -188,7 +223,7 @@ export async function startScheduledQuiz(
     // Verify user is quiz owner
     const { data: quizData, error: quizError } = await supabase
       .from("quiz")
-      .select("owner_id, status, open_time, close_time")
+      .select("owner_id, status, open_time, close_time, current_session_id")
       .eq("class_code", classCode)
       .single();
 
@@ -200,11 +235,29 @@ export async function startScheduledQuiz(
       throw new Error("Only the quiz owner can start the quiz");
     }
 
-    // Ensure quiz is in scheduled status
-    if (quizData.status !== QUIZ_STATUS.SCHEDULED) {
+    // Ensure quiz is in scheduled status (not completed)
+    if (
+      quizData.status !== QUIZ_STATUS.SCHEDULED &&
+      quizData.status !== QUIZ_STATUS.SCHEDULED_COMPLETED
+    ) {
       throw new Error(
         `Cannot start quiz. Current status: ${quizData.status}. Only scheduled quizzes can be started.`,
       );
+    }
+
+    // Prevent starting a completed scheduled quiz
+    if (quizData.status === QUIZ_STATUS.SCHEDULED_COMPLETED) {
+      throw new Error(
+        "Cannot start quiz. This scheduled quiz has already been completed. You can view results instead.",
+      );
+    }
+
+    // Check if quiz is already started (has session_id)
+    if (quizData.current_session_id) {
+      console.log(
+        `⚠️ Scheduled quiz already has session_id: ${quizData.current_session_id}. Returning existing session.`,
+      );
+      return quizData.current_session_id;
     }
 
     // Validate quiz is within the scheduled time window
@@ -230,11 +283,12 @@ export async function startScheduledQuiz(
     const sessionId = crypto.randomUUID();
     console.log("🎮 Starting scheduled quiz session:", sessionId);
 
-    // Update status to IN_GAME and set session_id
+    // CRITICAL: Keep status as SCHEDULED, only set current_session_id
+    // This differentiates scheduled quizzes from live "in game" quizzes
     const { error: updateError } = await supabase
       .from("quiz")
       .update({
-        status: QUIZ_STATUS.IN_GAME,
+        // Status remains SCHEDULED - do not change to IN_GAME
         current_session_id: sessionId,
       })
       .eq("class_code", classCode);
@@ -253,7 +307,7 @@ export async function startScheduledQuiz(
     channel.unsubscribe();
 
     console.log(
-      `✅ Scheduled quiz started: ${classCode}, Session: ${sessionId}`,
+      `✅ Scheduled quiz started (status remains SCHEDULED): ${classCode}, Session: ${sessionId}`,
     );
     return sessionId;
   } catch (error) {
@@ -356,14 +410,7 @@ export async function insertQuizStudent(
   // Check quiz access status without modifying state
   const quizStatus = await checkScheduledQuizAccess(classCode);
 
-  // Block registration if quiz is not in game
-  if (quizStatus.status === QUIZ_STATUS.SCHEDULED) {
-    throw new Error(
-      quizStatus.message ||
-        "This quiz is scheduled. Please wait for the professor to start it.",
-    );
-  }
-
+  // Block registration if quiz is not open
   if (!quizStatus.isOpen) {
     throw new Error(
       quizStatus.message || "This quiz is not currently available.",
@@ -381,8 +428,13 @@ export async function insertQuizStudent(
     throw new Error("Quiz not found");
   }
 
-  // Verify quiz is in game and has a valid session
-  if (quizData.status !== QUIZ_STATUS.IN_GAME) {
+  // CRITICAL: Allow SCHEDULED status if it has a session_id (professor started it)
+  // This enables scheduled quizzes to work without changing status to IN_GAME
+  const isScheduledQuizActive =
+    quizData.status === QUIZ_STATUS.SCHEDULED && !!quizData.current_session_id;
+  const isLiveQuizActive = quizData.status === QUIZ_STATUS.IN_GAME;
+
+  if (!isScheduledQuizActive && !isLiveQuizActive) {
     throw new Error(
       "Cannot join quiz. The professor has not started the quiz yet.",
     );
@@ -416,7 +468,7 @@ export async function insertQuizStudent(
   }
 
   console.log(
-    `✅ Student registered for quiz: ${user.name}, Session: ${quizData.current_session_id}`,
+    `✅ Student registered for quiz: ${user.name}, Session: ${quizData.current_session_id}, Status: ${quizData.status}`,
   );
   return data;
 }
@@ -424,7 +476,6 @@ export async function insertQuizStudent(
 export async function checkQuizStatus(
   classCode: string,
   user: User,
-  name?: string,
 ): Promise<QuizStatusResponse> {
   // Get quiz data
   const quizData = await getQuizById(classCode);
@@ -453,7 +504,7 @@ export async function submitScheduledAnswer(
   timeTaken: number = 0,
 ): Promise<boolean> {
   try {
-    // CRITICAL: Validate quiz is in game before accepting answers
+    // CRITICAL: Validate quiz is active before accepting answers
     const { data: quizData, error: quizError } = await supabase
       .from("quiz")
       .select("status, current_session_id")
@@ -464,13 +515,6 @@ export async function submitScheduledAnswer(
       throw new Error("Quiz not found");
     }
 
-    // Block answer submission if quiz is still scheduled
-    if (quizData.status === QUIZ_STATUS.SCHEDULED) {
-      throw new Error(
-        "Cannot submit answer. The quiz is scheduled but not started. Please wait for the professor to start it.",
-      );
-    }
-
     // Block answer submission if no valid session exists
     if (!quizData.current_session_id) {
       throw new Error(
@@ -478,10 +522,16 @@ export async function submitScheduledAnswer(
       );
     }
 
-    // Verify quiz is in game status
-    if (quizData.status !== QUIZ_STATUS.IN_GAME) {
+    // CRITICAL: Allow SCHEDULED status if it has a session_id (professor started it)
+    // This enables scheduled quizzes to accept answers without changing status to IN_GAME
+    const isScheduledQuizActive =
+      quizData.status === QUIZ_STATUS.SCHEDULED &&
+      !!quizData.current_session_id;
+    const isLiveQuizActive = quizData.status === QUIZ_STATUS.IN_GAME;
+
+    if (!isScheduledQuizActive && !isLiveQuizActive) {
       throw new Error(
-        `Cannot submit answer. Quiz status is ${quizData.status}. Only active quizzes accept answers.`,
+        `Cannot submit answer. Quiz status is ${quizData.status} and no active session found. Please wait for the professor to start the quiz.`,
       );
     }
 
@@ -562,6 +612,270 @@ export async function updateScheduledQuizScore(
     console.log("Scheduled quiz score updated successfully");
   } catch (error) {
     console.error("Error updating scheduled quiz score:", error);
+    throw error;
+  }
+}
+
+/**
+ * Finalize a scheduled quiz - copy data from quiz_students to quiz_history
+ * This ensures student dashboards and exports work correctly
+ * Should be called when:
+ * 1. Student completes all questions
+ * 2. Professor manually ends the quiz
+ * 3. Quiz reaches close_time (automatic finalization)
+ */
+export async function finalizeScheduledQuiz(
+  classCode: string,
+): Promise<boolean> {
+  try {
+    console.log("🔄 Starting scheduled quiz finalization for:", classCode);
+
+    // Get quiz data including session_id
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("quiz_id, current_session_id, status")
+      .eq("class_code", classCode)
+      .single();
+
+    if (quizError || !quizData) {
+      console.error("❌ Error fetching quiz data:", quizError);
+      throw new Error("Quiz not found");
+    }
+
+    const { quiz_id: quizId, current_session_id: sessionId, status } = quizData;
+
+    // Check if quiz is already finalized
+    if (status === QUIZ_STATUS.SCHEDULED_COMPLETED) {
+      console.log(
+        "⚠️ Quiz is already finalized (SCHEDULED_COMPLETED). Skipping finalization.",
+      );
+      return true; // Already finalized, return success
+    }
+
+    // Validate quiz was started (has session_id)
+    if (!sessionId) {
+      console.error("❌ No session_id found - quiz was never started");
+      throw new Error(
+        "Cannot finalize quiz: No active session found. The quiz may not have been started properly.",
+      );
+    }
+
+    // Check if quiz is in a state that can be finalized
+    // CRITICAL: Scheduled quizzes remain SCHEDULED throughout participation
+    // Only finalize if quiz has a session_id (was started by professor)
+    if (status !== QUIZ_STATUS.IN_GAME && status !== QUIZ_STATUS.SCHEDULED) {
+      console.log(`⚠️ Quiz status is ${status} - may already be finalized`);
+    }
+
+    // Ensure scheduled quiz has session_id before finalizing
+    if (status === QUIZ_STATUS.SCHEDULED && !sessionId) {
+      throw new Error(
+        "Cannot finalize scheduled quiz: No active session found. The quiz may not have been started properly.",
+      );
+    }
+
+    console.log("📝 Quiz ID:", quizId);
+    console.log("🎯 Session ID:", sessionId);
+
+    // Call the atomic RPC function with retry logic
+    let lastError = null;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(
+        `🔄 Attempt ${attempt}/${maxRetries} to finalize scheduled quiz...`,
+      );
+
+      try {
+        const { data: result, error: rpcError } = await supabase.rpc(
+          "rpc_end_game_atomic",
+          {
+            p_class_code: classCode,
+            p_quiz_id: quizId,
+            p_session_id: sessionId,
+          },
+        );
+
+        if (rpcError) {
+          console.error(`❌ RPC Error on attempt ${attempt}:`, rpcError);
+          lastError = rpcError;
+
+          // Check for specific error codes
+          if (rpcError.code === "42501") {
+            console.error(
+              "🔒 RLS POLICY ERROR: Row Level Security blocking operation",
+            );
+            console.error(
+              "FIX: Run supabase/migrations/002_fix_quiz_history_rls_policies.sql",
+            );
+            break; // Don't retry RLS errors
+          } else if (rpcError.code === "42883") {
+            console.error(
+              "⚠️ RPC FUNCTION NOT FOUND: rpc_end_game_atomic doesn't exist",
+            );
+            console.error(
+              "FIX: Run supabase/migrations/001_create_atomic_end_game_rpc.sql",
+            );
+            break; // Don't retry missing function errors
+          }
+
+          // Exponential backoff for retryable errors
+          if (attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt) * 500; // 1s, 2s, 4s
+            console.log(`⏳ Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+        } else {
+          // Success!
+          console.log("✅ RPC Result:", result);
+
+          if (result && result.success) {
+            console.log(`✅ Successfully finalized scheduled quiz!`);
+            console.log(
+              `   - Inserted: ${result.inserted_count} records to quiz_history`,
+            );
+            console.log(
+              `   - Deleted: ${result.deleted_count} records from quiz_students`,
+            );
+            console.log(`   - Total students: ${result.total_students}`);
+
+            if (result.warning) {
+              console.warn("⚠️ Warning:", result.warning);
+            }
+
+            // CRITICAL: Update quiz status to SCHEDULED_COMPLETED (not ACTIVE)
+            // This keeps scheduled quizzes in the scheduled category after finalization
+            // and prevents them from appearing in live quiz tabs
+            await supabase
+              .from("quiz")
+              .update({ status: QUIZ_STATUS.SCHEDULED_COMPLETED })
+              .eq("class_code", classCode);
+
+            return true;
+          } else {
+            console.error(
+              "❌ RPC returned failure:",
+              result?.error || "Unknown error",
+            );
+            lastError = result?.error;
+            return false;
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Exception on attempt ${attempt}:`, error);
+        lastError = error;
+
+        if (attempt < maxRetries) {
+          const delayMs = Math.pow(2, attempt) * 500;
+          console.log(`⏳ Retrying in ${delayMs}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    // If we get here, all retries failed
+    console.error("❌ CRITICAL: All attempts to finalize quiz failed!");
+    console.error("Last error:", lastError);
+    throw new Error(
+      `Failed to finalize quiz after ${maxRetries} attempts: ${lastError}`,
+    );
+  } catch (error) {
+    console.error("❌ Error in finalizeScheduledQuiz:", error);
+    throw error;
+  }
+}
+
+/**
+ * Finalize a single student's quiz attempt
+ * Used when a student completes all questions in a scheduled quiz
+ * This creates a partial finalization for one student only
+ */
+export async function finalizeStudentAttempt(
+  classCode: string,
+  studentId: string,
+): Promise<boolean> {
+  try {
+    console.log("📝 Finalizing attempt for student:", studentId);
+
+    // Get quiz and student data
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("quiz_id, current_session_id")
+      .eq("class_code", classCode)
+      .single();
+
+    if (quizError || !quizData) {
+      throw new Error("Quiz not found");
+    }
+
+    const { quiz_id: quizId, current_session_id: sessionId } = quizData;
+
+    if (!sessionId) {
+      throw new Error("No active session found");
+    }
+
+    // Get student data from quiz_students
+    const { data: studentData, error: studentError } = await supabase
+      .from("quiz_students")
+      .select("*")
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+        session_id: sessionId,
+      })
+      .maybeSingle();
+
+    if (studentError) {
+      throw studentError;
+    }
+
+    if (!studentData) {
+      console.warn(
+        "⚠️ Student not found in quiz_students - may already be finalized",
+      );
+      return true;
+    }
+
+    // Insert into quiz_history
+    const { error: insertError } = await supabase.from("quiz_history").insert([
+      {
+        quiz_id: quizId,
+        class_code: classCode,
+        quiz_student_id: studentData.quiz_student_id,
+        student_name: studentData.student_name,
+        student_email: studentData.student_email,
+        student_avatar: studentData.student_avatar,
+        score: studentData.score || 0,
+        right_answer: studentData.right_answer || 0,
+        wrong_answer: studentData.wrong_answer || 0,
+        placement: studentData.placement || 0,
+        quiz_taken: true,
+        session_id: sessionId,
+        completed_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (insertError) {
+      // Check if error is due to duplicate (already finalized)
+      if (insertError.code === "23505") {
+        console.log("✅ Student already finalized - skipping");
+        return true;
+      }
+      throw insertError;
+    }
+
+    // Delete from quiz_students
+    await supabase.from("quiz_students").delete().match({
+      quiz_student_id: studentId,
+      class_code: classCode,
+      session_id: sessionId,
+    });
+
+    console.log("✅ Student attempt finalized successfully");
+    return true;
+  } catch (error) {
+    console.error("❌ Error finalizing student attempt:", error);
     throw error;
   }
 }

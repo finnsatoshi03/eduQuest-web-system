@@ -17,6 +17,8 @@ interface SummaryProps {
     correctAnswer: string;
   }[];
   onFinish: () => void;
+  isScheduledQuiz?: boolean;
+  isResultsPending?: boolean;
 }
 
 interface AccuracySectionProps {
@@ -70,6 +72,8 @@ const Summary: React.FC<SummaryProps> = ({
   rank,
   questions,
   onFinish,
+  isScheduledQuiz = false,
+  isResultsPending = false,
 }) => {
   const getAnalysis = () => {
     const percentage = (score / totalQuestions) * 100;
@@ -119,8 +123,19 @@ const Summary: React.FC<SummaryProps> = ({
           transition={{ delay: 0.4 }}
           className="mx-auto my-2 flex w-fit items-center gap-1 rounded bg-slate-400 bg-opacity-50 px-2 py-1 text-xs"
         >
-          <Computer size={16} /> Live Quiz
+          <Computer size={16} /> {isScheduledQuiz ? "Scheduled Quiz" : "Live Quiz"}
         </motion.p>
+        {isResultsPending && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mx-auto my-4 flex w-fit items-center gap-2 rounded-lg bg-yellow-500 bg-opacity-90 px-4 py-2 text-sm font-semibold text-yellow-900"
+          >
+            <span className="animate-pulse">⏳</span>
+            Results Pending - Your answers have been submitted. Final results will be available once the professor finalizes the quiz.
+          </motion.div>
+        )}
         <motion.p
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

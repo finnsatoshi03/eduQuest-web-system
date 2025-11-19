@@ -331,19 +331,30 @@ export async function exportQuizResultsToExcel(
     XLSX.utils.book_append_sheet(workbook, studentResultsSheet, "Student Results");
 
     // SHEET 3: Detailed Answers (if answers data exists)
+    // CRITICAL: Only create this sheet once, using quiz_student_answers as the single source of truth
+    // This prevents duplication by ensuring we use the same data source as Question Analytics
     if (answersData && answersData.length > 0) {
-      const detailedAnswers: DetailedAnswer[] = answersData.map(
-        (answer: any) => ({
-          student_name: answer.student_name || "Unknown",
-          student_email: answer.student_email || "N/A",
-          question: answer.quiz_questions?.question || "N/A",
-          student_answer: answer.student_answer || "No answer",
-          correct_answer: answer.quiz_questions?.right_answer || "N/A",
-          is_correct: answer.is_correct,
-          points: answer.is_correct ? answer.quiz_questions?.points || 0 : 0,
-          time_taken: answer.time_taken || 0,
-        }),
-      );
+      // Deduplicate answers by student + question combination to prevent duplicates
+      const uniqueAnswersMap = new Map<string, DetailedAnswer>();
+      
+      answersData.forEach((answer: any) => {
+        const key = `${answer.student_name || "Unknown"}_${answer.quiz_question_id}`;
+        // Only keep the first occurrence (most recent if sorted by answered_at)
+        if (!uniqueAnswersMap.has(key)) {
+          uniqueAnswersMap.set(key, {
+            student_name: answer.student_name || "Unknown",
+            student_email: answer.student_email || "N/A",
+            question: answer.quiz_questions?.question || "N/A",
+            student_answer: answer.student_answer || "No answer",
+            correct_answer: answer.quiz_questions?.right_answer || "N/A",
+            is_correct: answer.is_correct,
+            points: answer.is_correct ? answer.quiz_questions?.points || 0 : 0,
+            time_taken: answer.time_taken || 0,
+          });
+        }
+      });
+
+      const detailedAnswers: DetailedAnswer[] = Array.from(uniqueAnswersMap.values());
 
       const detailedAnswersSheet = XLSX.utils.json_to_sheet(detailedAnswers, {
         header: [
@@ -384,10 +395,23 @@ export async function exportQuizResultsToExcel(
     }
 
     // SHEET 4: Question Analytics
-    if (questionsData && answersData) {
+    // CRITICAL: Use the same answersData source as Detailed Answers to ensure consistency
+    // This prevents duplication and ensures both sheets reference the same data
+    if (questionsData && answersData && answersData.length > 0) {
+      // Deduplicate answers for analytics (same logic as Detailed Answers)
+      const uniqueAnswersForAnalytics = new Map<string, any>();
+      answersData.forEach((answer: any) => {
+        const key = `${answer.student_name || "Unknown"}_${answer.quiz_question_id}`;
+        if (!uniqueAnswersForAnalytics.has(key)) {
+          uniqueAnswersForAnalytics.set(key, answer);
+        }
+      });
+      const deduplicatedAnswers = Array.from(uniqueAnswersForAnalytics.values());
+
       const questionAnalytics: QuestionAnalytics[] = questionsData.map(
         (question) => {
-          const questionAnswers = answersData.filter(
+          // Use deduplicated answers to match Detailed Answers sheet
+          const questionAnswers = deduplicatedAnswers.filter(
             (a: any) => a.quiz_question_id === question.quiz_question_id,
           );
 

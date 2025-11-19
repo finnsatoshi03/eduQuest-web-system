@@ -178,16 +178,24 @@ const QuizCard: React.FC<QuizCardProps> = ({
             className={`w-fit rounded-full px-2 text-[0.6rem] font-semibold uppercase ${
               quiz.status === QUIZ_STATUS.DRAFT
                 ? "bg-red-300 text-red-700"
-                : quiz.status === QUIZ_STATUS.SCHEDULED && timeStatus === "closed"
+                : (quiz.status === QUIZ_STATUS.SCHEDULED ||
+                    quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
+                    timeStatus === "closed"
                   ? "bg-gray-300 text-gray-700"
-                  : quiz.status === QUIZ_STATUS.SCHEDULED
-                    ? "bg-yellow-300 text-yellow-700"
-                    : quiz.status === QUIZ_STATUS.IN_GAME
-                      ? "bg-blue-300 text-blue-700"
-                      : "bg-green-300 text-green-700"
+                  : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
+                    ? "bg-green-300 text-green-700"
+                    : quiz.status === QUIZ_STATUS.SCHEDULED
+                      ? "bg-yellow-300 text-yellow-700"
+                      : quiz.status === QUIZ_STATUS.IN_GAME
+                        ? "bg-blue-300 text-blue-700"
+                        : "bg-green-300 text-green-700"
             }`}
           >
-            {timeStatus === "closed" ? "Closed" : quiz.status}
+            {timeStatus === "closed"
+              ? "Closed"
+              : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
+                ? "Scheduled (Completed)"
+                : quiz.status}
           </p>
           <h3 className="text-lg font-bold">{quiz.title}</h3>
           <div className="flex items-center gap-1 text-xs opacity-60 md:text-sm">
@@ -200,7 +208,9 @@ const QuizCard: React.FC<QuizCardProps> = ({
               )}
             </p>
           </div>
-          {quiz.status === QUIZ_STATUS.SCHEDULED && quiz.open_time && (
+          {(quiz.status === QUIZ_STATUS.SCHEDULED ||
+            quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
+            quiz.open_time && (
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2 text-xs">
                 <Calendar className="size-4" />
@@ -293,9 +303,20 @@ const QuizCard: React.FC<QuizCardProps> = ({
               </Button>
             </>
           )}
-          {quiz.status === QUIZ_STATUS.SCHEDULED && (
+          {(quiz.status === QUIZ_STATUS.SCHEDULED ||
+            quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) && (
             <>
-              {timeStatus === "upcoming" ? (
+              {quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED ? (
+                // Completed scheduled quiz - only show responses button
+                <Button
+                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                  onClick={handleResponses}
+                >
+                  <UsersRound size={14} />
+                  View Results
+                </Button>
+              ) : timeStatus === "upcoming" ? (
+                // Scheduled but not yet ready
                 <Button
                   variant="outline"
                   className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
@@ -305,6 +326,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                   Edit Quiz
                 </Button>
               ) : timeStatus === "ready" ? (
+                // Scheduled and ready to start
                 <>
                   <Button
                     className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
@@ -329,6 +351,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                   </Button>
                 </>
               ) : (
+                // Scheduled and in progress (timeStatus === "active")
                 <Button
                   className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
                   onClick={handleResponses}
@@ -392,8 +415,12 @@ export default function ProfessorDashboard() {
 
   // Filter quizzes by status
   const activeQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.ACTIVE);
+  // CRITICAL: Include both SCHEDULED and SCHEDULED_COMPLETED in scheduled tab
+  // This keeps finalized scheduled quizzes in the scheduled category
   const scheduledQuizzes = safeQuizzes.filter(
-    (quiz) => quiz.status === QUIZ_STATUS.SCHEDULED,
+    (quiz) =>
+      quiz.status === QUIZ_STATUS.SCHEDULED ||
+      quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED,
   );
   const draftQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.DRAFT);
   const inLobbyQuizzes = safeQuizzes.filter(
