@@ -181,6 +181,90 @@ export async function deleteQuiz(
   return true;
 }
 
+export async function cloneQuiz(
+  sourceQuizId: string,
+  ownerId: string,
+): Promise<Quiz | null> {
+  try {
+    // 1. Fetch source quiz
+    const sourceQuiz = await getQuizById(sourceQuizId);
+    if (!sourceQuiz) {
+      throw new Error("Source quiz not found");
+    }
+
+    // Verify ownership
+    if (sourceQuiz.owner_id !== ownerId) {
+      throw new Error("Unauthorized to clone this quiz");
+    }
+
+    // 2. Fetch source questions
+    const sourceQuestions = await getQuestions(sourceQuizId);
+
+    // 3. Generate new IDs
+    const newQuizId = uuidv4();
+
+    // 4. Create cloned quiz data (draft status)
+    const clonedQuizData = {
+      quiz_id: newQuizId,
+      title: `${sourceQuiz.title} (Copy)`,
+      description: sourceQuiz.description,
+      subject: sourceQuiz.subject,
+      cover_image: sourceQuiz.cover_image,
+      owner_id: ownerId,
+      status: QUIZ_STATUS.DRAFT,
+      retake: sourceQuiz.retake,
+      shuffle: sourceQuiz.shuffle,
+      no_time: sourceQuiz.no_time,
+      max_items: sourceQuiz.max_items,
+      total_points: sourceQuiz.total_points,
+      question_type: sourceQuiz.question_type,
+    };
+
+    // 5. Insert cloned quiz
+    const { data: clonedQuiz, error: quizError } = await supabase
+      .from("quiz")
+      .insert(clonedQuizData)
+      .select()
+      .single();
+
+    if (quizError) {
+      console.error("Error cloning quiz:", quizError);
+      throw new Error(`Failed to clone quiz: ${quizError.message}`);
+    }
+
+    // 6. Clone all questions if they exist
+    if (sourceQuestions && sourceQuestions.length > 0) {
+      const clonedQuestions = sourceQuestions.map((q) => ({
+        quiz_id: newQuizId,
+        question: q.question,
+        right_answer: q.right_answer,
+        distractor: q.distractor,
+        time: q.time,
+        image_url: q.image_url,
+        points: q.points,
+        question_type: q.question_type,
+        order: q.order,
+      }));
+
+      const { error: questionsError } = await supabase
+        .from("quiz_questions")
+        .insert(clonedQuestions);
+
+      if (questionsError) {
+        // Rollback: delete the cloned quiz if questions fail
+        await supabase.from("quiz").delete().eq("quiz_id", newQuizId);
+        console.error("Error cloning questions:", questionsError);
+        throw new Error(`Failed to clone questions: ${questionsError.message}`);
+      }
+    }
+
+    return clonedQuiz;
+  } catch (error) {
+    console.error("Error in cloneQuiz:", error);
+    throw error;
+  }
+}
+
 export async function generateQuestions(
   file: File,
   questionType: string,

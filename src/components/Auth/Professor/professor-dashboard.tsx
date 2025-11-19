@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +8,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import Loader from "@/components/Shared/Loader";
 import {
   Calendar,
@@ -23,6 +33,7 @@ import {
   AlertCircle,
   UsersRound,
   Pen,
+  Files,
 } from "lucide-react";
 import { formatTimeAgo } from "@/lib/helpers";
 import { useAuth } from "@/contexts/AuthProvider";
@@ -31,6 +42,7 @@ import {
   createQuiz,
   deleteQuiz,
   updateQuizStatus,
+  cloneQuiz,
 } from "@/services/api/apiQuiz";
 import { startScheduledQuiz } from "@/services/api/apiScheduledQuiz";
 import { Quiz, User } from "@/lib/types";
@@ -44,6 +56,7 @@ interface QuizCardProps {
   user: User;
   onEdit: (quizId: string) => void;
   onDelete: (quizId: string) => void;
+  onClone: (quizId: string) => void;
   nav: ReturnType<typeof useNavigate>;
 }
 
@@ -52,16 +65,12 @@ const QuizCard: React.FC<QuizCardProps> = ({
   user,
   onEdit,
   onDelete,
+  onClone,
   nav,
 }) => {
   const { mutate: mutateQuizStatus, isPending: isLoading } = useMutation({
-    mutationFn: ({
-      quizId,
-      status,
-    }: {
-      quizId: string;
-      status: QuizStatus;
-    }) => updateQuizStatus(quizId, status),
+    mutationFn: ({ quizId, status }: { quizId: string; status: QuizStatus }) =>
+      updateQuizStatus(quizId, status),
     onError: (error) => {
       toast.error(`Failed to update quiz status: ${error.message}`);
     },
@@ -179,7 +188,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
               quiz.status === QUIZ_STATUS.DRAFT
                 ? "bg-red-300 text-red-700"
                 : (quiz.status === QUIZ_STATUS.SCHEDULED ||
-                    quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
+                      quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
                     timeStatus === "closed"
                   ? "bg-gray-300 text-gray-700"
                   : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
@@ -211,25 +220,9 @@ const QuizCard: React.FC<QuizCardProps> = ({
           {(quiz.status === QUIZ_STATUS.SCHEDULED ||
             quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
             quiz.open_time && (
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 text-xs">
-                <Calendar className="size-4" />
-                <span
-                  className={
-                    timeStatus === "closed"
-                      ? "text-gray-600"
-                      : "text-yellow-600"
-                  }
-                >
-                  {timeStatus === "closed"
-                    ? "Was available from: "
-                    : "Starts: "}
-                  {formatScheduledTime(quiz.open_time)}
-                </span>
-              </div>
-              {quiz.close_time && (
+              <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-xs">
-                  <Clock className="size-4" />
+                  <Calendar className="size-4" />
                   <span
                     className={
                       timeStatus === "closed"
@@ -237,24 +230,40 @@ const QuizCard: React.FC<QuizCardProps> = ({
                         : "text-yellow-600"
                     }
                   >
-                    Ends: {formatScheduledTime(quiz.close_time)}
+                    {timeStatus === "closed"
+                      ? "Was available from: "
+                      : "Starts: "}
+                    {formatScheduledTime(quiz.open_time)}
                   </span>
                 </div>
-              )}
-              {timeStatus === "ready" && remainingTime && (
-                <div className="flex items-center gap-1 text-xs text-green-600">
-                  <AlertCircle className="size-4" />
-                  {remainingTime}
-                </div>
-              )}
-              {timeStatus === "closed" && (
-                <span className="flex items-center gap-1 text-xs text-gray-600">
-                  <XCircle className="size-4" />
-                  Quiz period has ended
-                </span>
-              )}
-            </div>
-          )}
+                {quiz.close_time && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Clock className="size-4" />
+                    <span
+                      className={
+                        timeStatus === "closed"
+                          ? "text-gray-600"
+                          : "text-yellow-600"
+                      }
+                    >
+                      Ends: {formatScheduledTime(quiz.close_time)}
+                    </span>
+                  </div>
+                )}
+                {timeStatus === "ready" && remainingTime && (
+                  <div className="flex items-center gap-1 text-xs text-green-600">
+                    <AlertCircle className="size-4" />
+                    {remainingTime}
+                  </div>
+                )}
+                {timeStatus === "closed" && (
+                  <span className="flex items-center gap-1 text-xs text-gray-600">
+                    <XCircle className="size-4" />
+                    Quiz period has ended
+                  </span>
+                )}
+              </div>
+            )}
         </div>
         <p className="mt-1 text-xs opacity-50 sm:mt-3">
           <span className="font-default font-semibold">{user?.name}</span> •{" "}
@@ -266,7 +275,21 @@ const QuizCard: React.FC<QuizCardProps> = ({
           <PopoverTrigger>
             <EllipsisVertical size={18} />
           </PopoverTrigger>
-          <PopoverContent side="left" align="start" className="h-fit w-fit p-0">
+          <PopoverContent
+            side="left"
+            align="start"
+            className="flex h-fit w-fit flex-col items-start p-0"
+          >
+            {quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED && (
+              <Button
+                variant="link"
+                className="gap-1"
+                onClick={() => onClone(quiz.quiz_id)}
+              >
+                <Files size={16} />
+                Clone Quiz
+              </Button>
+            )}
             <Button
               variant="link"
               className="gap-1"
@@ -406,15 +429,21 @@ export default function ProfessorDashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { quizzes = [], isPending, isError } = useGetQuizzes();
-  const {
-    data: overallStats,
-    isLoading: isLoadingStats,
-  } = useProfessorOverallStats(user?.id);
+  const { data: overallStats, isLoading: isLoadingStats } =
+    useProfessorOverallStats(user?.id);
+
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [quizToClone, setQuizToClone] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   const safeQuizzes: Quiz[] = Array.isArray(quizzes) ? quizzes : [quizzes];
 
   // Filter quizzes by status
-  const activeQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.ACTIVE);
+  const activeQuizzes = safeQuizzes.filter(
+    (quiz) => quiz.status === QUIZ_STATUS.ACTIVE,
+  );
   // CRITICAL: Include both SCHEDULED and SCHEDULED_COMPLETED in scheduled tab
   // This keeps finalized scheduled quizzes in the scheduled category
   const scheduledQuizzes = safeQuizzes.filter(
@@ -422,9 +451,13 @@ export default function ProfessorDashboard() {
       quiz.status === QUIZ_STATUS.SCHEDULED ||
       quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED,
   );
-  const draftQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.DRAFT);
+  const draftQuizzes = safeQuizzes.filter(
+    (quiz) => quiz.status === QUIZ_STATUS.DRAFT,
+  );
   const inLobbyQuizzes = safeQuizzes.filter(
-    (quiz) => quiz.status === QUIZ_STATUS.IN_LOBBY || quiz.status === QUIZ_STATUS.IN_GAME,
+    (quiz) =>
+      quiz.status === QUIZ_STATUS.IN_LOBBY ||
+      quiz.status === QUIZ_STATUS.IN_GAME,
   );
 
   const { mutate: createNewQuiz, isPending: isCreatingQuiz } = useMutation({
@@ -450,6 +483,37 @@ export default function ProfessorDashboard() {
       toast.error(error.message);
     },
   });
+
+  const { mutate: mutateCloneQuiz, isPending: isCloningQuiz } = useMutation({
+    mutationFn: (quizId: string) => {
+      if (!user) throw new Error("User is not authenticated");
+      return cloneQuiz(quizId, user.id);
+    },
+    onSuccess: (data) => {
+      if (data) {
+        toast.success(`Quiz cloned successfully as "${data.title}"!`);
+        queryClient.invalidateQueries({ queryKey: ["quizzes", user!.id] });
+        // Optionally redirect to edit the cloned quiz
+        navigate(`/professor/quiz/${data.quiz_id}/customize`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to clone quiz: ${error.message}`);
+    },
+  });
+
+  const handleCloneQuiz = (quizId: string, quizTitle: string) => {
+    setQuizToClone({ id: quizId, title: quizTitle });
+    setCloneDialogOpen(true);
+  };
+
+  const confirmCloneQuiz = () => {
+    if (quizToClone) {
+      mutateCloneQuiz(quizToClone.id);
+      setCloneDialogOpen(false);
+      setQuizToClone(null);
+    }
+  };
 
   if (isPending) return <Loader />;
   if (isError) return <p>Error loading quizzes.</p>;
@@ -506,6 +570,7 @@ export default function ProfessorDashboard() {
                   navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
                 }
                 onDelete={mutateDeleteQuiz}
+                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
                 nav={navigate}
               />
             ))
@@ -524,6 +589,7 @@ export default function ProfessorDashboard() {
                   navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
                 }
                 onDelete={mutateDeleteQuiz}
+                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
                 nav={navigate}
               />
             ))
@@ -542,6 +608,7 @@ export default function ProfessorDashboard() {
                   navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
                 }
                 onDelete={mutateDeleteQuiz}
+                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
                 nav={navigate}
               />
             ))
@@ -560,6 +627,7 @@ export default function ProfessorDashboard() {
                   navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
                 }
                 onDelete={mutateDeleteQuiz}
+                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
                 nav={navigate}
               />
             ))
@@ -568,6 +636,36 @@ export default function ProfessorDashboard() {
           )}
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="!text-black dark:!text-white">
+              Clone Quiz for New Session?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to clone <strong>"{quizToClone?.title}"</strong> for a
+              new session?
+              <br />
+              <br />
+              This will create a copy of the quiz with all questions and
+              settings. The cloned quiz will be in draft mode so you can edit it
+              before scheduling.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="!text-black dark:!text-white">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCloneQuiz}
+              disabled={isCloningQuiz}
+            >
+              {isCloningQuiz ? "Cloning..." : "Clone Quiz"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

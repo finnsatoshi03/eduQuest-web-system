@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import ClassAccuracy from "../quiz_room/class-accuracy";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Leaderboard from "../quiz_room/leaderboard";
@@ -65,7 +66,7 @@ export default function Responses() {
           const newStatus = (payload.new as any).status;
           setQuizStatus(newStatus);
           setIsFinalized(newStatus === QUIZ_STATUS.SCHEDULED_COMPLETED);
-          
+
           // If finalized, refresh leaderboard data
           if (newStatus === QUIZ_STATUS.SCHEDULED_COMPLETED) {
             toast.success("Quiz finalized! Results are now available.");
@@ -96,7 +97,7 @@ export default function Responses() {
         "Quiz finalized successfully! Results are now in student dashboards.",
         { id: loadingToast },
       );
-      
+
       // The useLeaderboard hook will automatically detect finalization
       // and refresh data from quiz_history via realtime subscription
     } catch (error) {
@@ -125,12 +126,9 @@ export default function Responses() {
       (quizStatus === QUIZ_STATUS.SCHEDULED ||
         quizStatus === QUIZ_STATUS.IN_GAME)
     ) {
-      toast.error(
-        "Please finalize the quiz before exporting results.",
-        {
-          duration: 4000,
-        },
-      );
+      toast.error("Please finalize the quiz before exporting results.", {
+        duration: 4000,
+      });
       return;
     }
 
@@ -169,45 +167,49 @@ export default function Responses() {
           : "h-full"
       }`}
     >
-      <div className="flex w-full items-center justify-between">
-        <ClassAccuracy accuracy={classAccuracy} />
-        <div className="flex items-center gap-2">
-          {/* Show finalize button when quiz is SCHEDULED and has students */}
-          {/* Scheduled quizzes stay SCHEDULED until finalized (status becomes SCHEDULED_COMPLETED) */}
-          {!isFinalized &&
-            (quizStatus === QUIZ_STATUS.SCHEDULED ||
-              quizStatus === QUIZ_STATUS.IN_GAME) && (
+      <div className="absolute left-0 top-6 flex items-center gap-2">
+        {/* Show finalize button when quiz is SCHEDULED and has students */}
+        {/* Scheduled quizzes stay SCHEDULED until finalized (status becomes SCHEDULED_COMPLETED) */}
+        {!isFinalized &&
+          (quizStatus === QUIZ_STATUS.SCHEDULED ||
+            quizStatus === QUIZ_STATUS.IN_GAME) && (
             <Button
               onClick={handleFinalize}
-              disabled={isFinalizing || !leaderboardData || leaderboardData.length === 0}
+              disabled={
+                isFinalizing || !leaderboardData || leaderboardData.length === 0
+              }
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
             >
               <CheckCircle className="h-4 w-4" />
               {isFinalizing ? "Finalizing..." : "Finalize Quiz"}
             </Button>
           )}
-          {isFinalized && (
-            <span className="flex items-center gap-2 text-sm text-green-600">
-              <CheckCircle className="h-4 w-4" />
-              Quiz Finalized
-            </span>
-          )}
-          <Button
-            onClick={handleExport}
-            disabled={isExporting || !leaderboardData || leaderboardData.length === 0}
-            className="flex items-center gap-2"
-            title={
-              !isFinalized &&
-              (quizStatus === QUIZ_STATUS.SCHEDULED ||
-                quizStatus === QUIZ_STATUS.IN_GAME)
-                ? "Finalize quiz before exporting"
-                : "Export results to Excel"
-            }
-          >
-            <Download className="h-4 w-4" />
-            {isExporting ? "Exporting..." : "Export to Excel"}
-          </Button>
-        </div>
+        {isFinalized && (
+          <span className="flex items-center gap-2 text-sm text-green-600">
+            <CheckCircle className="h-4 w-4" />
+            Quiz Finalized
+          </span>
+        )}
+        <Button
+          onClick={handleExport}
+          disabled={
+            isExporting || !leaderboardData || leaderboardData.length === 0
+          }
+          className="flex items-center gap-2"
+          title={
+            !isFinalized &&
+            (quizStatus === QUIZ_STATUS.SCHEDULED ||
+              quizStatus === QUIZ_STATUS.IN_GAME)
+              ? "Finalize quiz before exporting"
+              : "Export results to Excel"
+          }
+        >
+          <Download className="h-4 w-4" />
+          {isExporting ? "Exporting..." : "Export to Excel"}
+        </Button>
+      </div>
+      <div className="flex w-full items-center justify-between">
+        <ClassAccuracy accuracy={classAccuracy} />
       </div>
 
       <div className="w-full">
