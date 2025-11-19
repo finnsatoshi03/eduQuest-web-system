@@ -44,6 +44,8 @@ const GameSession: React.FC<GameSessionProps> = ({
   const [activeTab, setActiveTab] = useState("leaderboards");
   const [isGameEnded, setIsGameEnded] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false); // Guard against double-finalization
+  const [isFinalizingQuiz, setIsFinalizingQuiz] = useState(false); // Loading state during finalization
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -62,21 +64,94 @@ const GameSession: React.FC<GameSessionProps> = ({
 
   const handleNextQuestion = async () => {
     if (currentQuestionIndex < questions.length - 1) {
+      // More questions remaining - advance to next
       const nextIndex = currentQuestionIndex + 1;
       setCurrentQuestionIndex(nextIndex);
       const nextQuestion = questions[nextIndex];
       setTimeLeft(nextQuestion.time);
     } else {
-      setIsGameEnded(true);
+      // CRITICAL FIX: Last question finished - finalize IMMEDIATELY
+      // This ensures quiz history is written BEFORE showing results modal
+      await finalizeQuiz();
     }
   };
 
-  const endGame = async () => {
-    const success = await sendEndGame(classId);
-    if (success) {
-      setGameStart(false);
-      navigate("/professor/dashboard");
+  /**
+   * Finalizes the quiz by writing history, broadcasting events, and cleaning up.
+   * This is the SINGLE SOURCE OF TRUTH for quiz finalization.
+   * Called automatically when the last question ends.
+   */
+  const finalizeQuiz = async () => {
+    // Guard against double-finalization
+    if (isFinalized) {
+      console.warn("⚠️ Quiz already finalized. Skipping duplicate finalization.");
+      return;
     }
+
+    console.log("🎯 Finalizing quiz...");
+    setIsFinalized(true);
+    setIsFinalizingQuiz(true);
+
+    // Show loading toast
+    const finalizingToast = toast.loading("Saving quiz results...");
+
+    try {
+      // STEP 1: Run atomic finalization (writes history, clears temp tables)
+      const success = await sendEndGame(classId);
+
+      if (!success) {
+        console.error("❌ Quiz finalization failed!");
+        toast.error("Failed to save quiz results. Please try again.", {
+          id: finalizingToast,
+        });
+        setIsFinalized(false); // Allow retry
+        setIsFinalizingQuiz(false);
+        return;
+      }
+
+      console.log("✅ Quiz finalized successfully");
+      toast.success("Quiz results saved successfully!", {
+        id: finalizingToast,
+      });
+
+      // STEP 2: Show results modal to professor
+      // IMPORTANT: Do NOT call setGameStart(false) here!
+      // That would force navigation back to waiting lobby.
+      // Professor should stay on this screen to review results.
+      setIsGameEnded(true);
+      setIsFinalizingQuiz(false);
+
+      // At this point:
+      // ✅ Quiz history is written
+      // ✅ Students can see results in dashboard
+      // ✅ Export is ready
+      // ✅ Professor sees results modal
+      // ✅ Professor STAYS on this screen (no forced navigation)
+    } catch (error) {
+      console.error("❌ Exception during finalization:", error);
+      toast.error("Error finalizing quiz. Results may not be saved.", {
+        id: finalizingToast,
+      });
+      setIsFinalized(false); // Allow retry
+      setIsFinalizingQuiz(false);
+    }
+  };
+
+  /**
+   * Handles closing the results modal.
+   * This is PURELY a UI action - NO backend operations.
+   * Finalization already happened in finalizeQuiz().
+   * This is the ONLY place where professor manually exits the quiz session.
+   */
+  const closeResultsModal = () => {
+    console.log("📊 Professor manually closing results screen");
+
+    // Now that professor is explicitly exiting, reset game state
+    // This will cause parent component to unmount GameSession
+    setGameStart(false);
+
+    // Navigate to dashboard
+    navigate("/professor/dashboard");
   };
 
   const handleExport = async () => {
@@ -120,11 +195,29 @@ const GameSession: React.FC<GameSessionProps> = ({
           : "h-full"
       }`}
     >
+      {/* Loading Overlay During Finalization */}
+      {isFinalizingQuiz && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="rounded-lg bg-white p-8 text-center shadow-xl dark:bg-gray-800">
+            <div className="mb-4 flex justify-center">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+            </div>
+            <h3 className="mb-2 text-xl font-bold">Finalizing Quiz</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Saving results and preparing dashboard...
+            </p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
+              This will only take a moment
+            </p>
+          </div>
+        </div>
+      )}
+
       {isGameEnded && (
         <div className="fixed left-6 top-24 z-10 flex gap-2 md:left-12 lg:left-16">
           <button
             className="rounded-md bg-slate-500 bg-opacity-10 p-1.5 hover:bg-opacity-20"
-            onClick={() => endGame()}
+            onClick={closeResultsModal}
             title="Close and return to dashboard"
           >
             <X />

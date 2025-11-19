@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { submitAnswer } from "@/services/api/apiRoom";
 import { submitScheduledAnswer } from "@/services/api/apiScheduledQuiz";
+import { retryWithBackoff, RetryError } from "@/utils/retry";
 
 interface SubmitAnswerParams {
   questionId: string;
@@ -15,45 +16,80 @@ interface UseQuizAnswerOptions {
   quizType: "live" | "scheduled";
   onSuccess?: (isCorrect: boolean) => void;
   onError?: (error: Error) => void;
+  maxRetries?: number;
 }
 
 /**
  * Custom hook for submitting quiz answers
  * Handles both live and scheduled quiz types with proper parameter passing
+ * Includes automatic retry logic with exponential backoff to prevent data loss
  * Follows React Query pattern for mutations
  */
-export function useQuizAnswer({ quizType, onSuccess, onError }: UseQuizAnswerOptions) {
+export function useQuizAnswer({
+  quizType,
+  onSuccess,
+  onError,
+  maxRetries = 3,
+}: UseQuizAnswerOptions) {
   const mutation = useMutation({
     mutationFn: async (params: SubmitAnswerParams) => {
       const { questionId, studentId, answer, quizId, classCode, timeTaken = 0 } = params;
 
-      if (quizType === "live") {
-        return await submitAnswer(
-          questionId,
-          studentId,
-          answer,
-          quizId,
-          classCode,
-          timeTaken
+      // Wrap submission with retry logic
+      try {
+        return await retryWithBackoff(
+          async () => {
+            if (quizType === "live") {
+              return await submitAnswer(
+                questionId,
+                studentId,
+                answer,
+                quizId,
+                classCode,
+                timeTaken
+              );
+            } else {
+              return await submitScheduledAnswer(
+                questionId,
+                studentId,
+                answer,
+                quizId,
+                classCode,
+                timeTaken
+              );
+            }
+          },
+          {
+            maxAttempts: maxRetries,
+            initialDelayMs: 500,
+            exponentialBase: 2,
+            onRetry: (attempt, error) => {
+              console.warn(
+                `⚠️ Answer submission failed (attempt ${attempt}/${maxRetries}):`,
+                error.message || error
+              );
+            },
+          }
         );
-      } else {
-        return await submitScheduledAnswer(
-          questionId,
-          studentId,
-          answer,
-          quizId,
-          classCode,
-          timeTaken
-        );
+      } catch (error) {
+        // If it's a RetryError, extract the original error
+        if (error instanceof RetryError) {
+          console.error(
+            `❌ Answer submission failed after ${error.attempts} attempts`
+          );
+          throw error.lastError;
+        }
+        throw error;
       }
     },
     onSuccess: (isCorrect) => {
+      console.log("✅ Answer submitted successfully:", isCorrect);
       if (onSuccess) {
         onSuccess(isCorrect);
       }
     },
     onError: (error: Error) => {
-      console.error("Error submitting answer:", error);
+      console.error("❌ Final error submitting answer:", error);
       if (onError) {
         onError(error);
       }

@@ -19,7 +19,28 @@ CREATE TABLE public.quiz (
   retake boolean,
   shuffle boolean,
   no_time boolean,
+  current_session_id uuid,
   CONSTRAINT quiz_pkey PRIMARY KEY (quiz_id)
+);
+CREATE TABLE public.quiz_history (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  quiz_id uuid,
+  class_code uuid,
+  quiz_student_id uuid NOT NULL,
+  student_name text NOT NULL,
+  student_email text,
+  student_avatar text,
+  score bigint DEFAULT 0,
+  right_answer bigint DEFAULT 0,
+  wrong_answer bigint DEFAULT 0,
+  placement bigint DEFAULT 0,
+  quiz_taken boolean DEFAULT true,
+  completed_at timestamp without time zone DEFAULT now(),
+  created_at timestamp without time zone DEFAULT now(),
+  session_id uuid DEFAULT gen_random_uuid(),
+  CONSTRAINT quiz_history_pkey PRIMARY KEY (id),
+  CONSTRAINT quiz_history_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id),
+  CONSTRAINT quiz_history_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
 );
 CREATE TABLE public.quiz_questions (
   quiz_id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -44,10 +65,14 @@ CREATE TABLE public.quiz_student_answers (
   is_correct boolean DEFAULT false,
   time_taken bigint DEFAULT 0,
   answered_at timestamp without time zone DEFAULT now(),
+  student_name text,
+  student_email text,
+  class_code uuid,
+  session_id uuid,
   CONSTRAINT quiz_student_answers_pkey PRIMARY KEY (id),
-  CONSTRAINT quiz_student_answers_quiz_student_id_fkey FOREIGN KEY (quiz_student_id) REFERENCES public.quiz_students(id),
   CONSTRAINT quiz_student_answers_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id),
-  CONSTRAINT quiz_student_answers_quiz_question_id_fkey FOREIGN KEY (quiz_question_id) REFERENCES public.quiz_questions(quiz_question_id)
+  CONSTRAINT quiz_student_answers_quiz_question_id_fkey FOREIGN KEY (quiz_question_id) REFERENCES public.quiz_questions(quiz_question_id),
+  CONSTRAINT quiz_student_answers_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
 );
 CREATE TABLE public.quiz_students (
   quiz_student_id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -61,6 +86,7 @@ CREATE TABLE public.quiz_students (
   student_avatar text,
   student_email text,
   quiz_taken boolean,
+  session_id uuid,
   CONSTRAINT quiz_students_pkey PRIMARY KEY (id),
   CONSTRAINT quiz_students_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
 );
@@ -86,8 +112,11 @@ CREATE TABLE public.temp_room_questions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   start_time timestamp with time zone,
   end_time timestamp with time zone,
+  quiz_id uuid,
+  right_answer text,
   CONSTRAINT temp_room_questions_pkey PRIMARY KEY (id),
-  CONSTRAINT temp_room_questions_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
+  CONSTRAINT temp_room_questions_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code),
+  CONSTRAINT temp_room_questions_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id)
 );
 CREATE TABLE public.user (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

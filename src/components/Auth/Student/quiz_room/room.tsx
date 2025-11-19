@@ -71,6 +71,10 @@ const SGameLobby: React.FC = () => {
     }[]
   >([]);
 
+  // Session Validation State
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
   // Answer State
   const [answerInput, setAnswerInput] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -144,6 +148,53 @@ const SGameLobby: React.FC = () => {
       return gameEventHandler(classId, setGameStartWrapper);
     }
   }, [classId, joined, initializeLeaderboard]);
+
+  // Session validation effect - check for valid session_id when game starts
+  useEffect(() => {
+    const validateSession = async () => {
+      if (!classId || !gameStart) {
+        setSessionReady(false);
+        return;
+      }
+
+      try {
+        const { data: quizData, error } = await supabase
+          .from("quiz")
+          .select("current_session_id")
+          .eq("class_code", classId)
+          .single();
+
+        if (error) {
+          console.error("Error checking session:", error);
+          setSessionError("Failed to connect to quiz session");
+          setSessionReady(false);
+          return;
+        }
+
+        if (quizData?.current_session_id) {
+          console.log("✅ Valid session detected:", quizData.current_session_id);
+          setSessionReady(true);
+          setSessionError(null);
+        } else {
+          console.warn("⏳ Waiting for session to start...");
+          setSessionError("Waiting for professor to start the game...");
+          setSessionReady(false);
+        }
+      } catch (error) {
+        console.error("Exception validating session:", error);
+        setSessionError("Error validating session");
+        setSessionReady(false);
+      }
+    };
+
+    validateSession();
+
+    // Poll for session every 2 seconds while game is starting
+    if (gameStart && !sessionReady) {
+      const interval = setInterval(validateSession, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [classId, gameStart, sessionReady]);
 
   // Question fetching effect
   useEffect(() => {
@@ -280,20 +331,46 @@ const SGameLobby: React.FC = () => {
   const handleAnswer = async (answer: string) => {
     if (!currentQuestion || !user || hasAnswered || !classId) return;
 
+    // Block answer if session not ready
+    if (!sessionReady) {
+      setSessionError("Cannot submit answer: Session not ready. Please wait...");
+      return;
+    }
+
     setSelectedAnswer(answer);
     setHasAnswered(true);
 
     // Calculate time taken (total time - remaining time)
     const timeTaken = (currentQuestion.time || 0) - timeLeft;
 
-    const isCorrect = await submitAnswerAsync({
-      questionId: currentQuestion.quiz_question_id,
-      studentId: user.id,
-      answer,
-      quizId: currentQuestion.quiz_id,
-      classCode: classId,
-      timeTaken: timeTaken > 0 ? timeTaken : 0,
-    });
+    let isCorrect = false;
+
+    try {
+      isCorrect = await submitAnswerAsync({
+        questionId: currentQuestion.quiz_question_id,
+        studentId: user.id,
+        answer,
+        quizId: currentQuestion.quiz_id,
+        classCode: classId,
+        timeTaken: timeTaken > 0 ? timeTaken : 0,
+      });
+      setSessionError(null); // Clear any previous errors
+    } catch (error: any) {
+      console.error("❌ Failed to submit answer:", error);
+
+      // Check if it's a session error
+      if (error.message?.includes("session")) {
+        setSessionError("Failed to submit: No active quiz session. Contact the professor.");
+        setSessionReady(false);
+      } else {
+        setSessionError("Failed to submit answer. Please try again.");
+      }
+
+      // Reset answer state to allow retry
+      setHasAnswered(false);
+      setSelectedAnswer(null);
+      return;
+    }
 
     let newScore = score;
     let newRightAns = rightAns;
@@ -449,6 +526,26 @@ const SGameLobby: React.FC = () => {
             height={24}
           />
         </div>
+
+        {/* Session Error/Warning Display */}
+        {sessionError && (
+          <div className="mb-4 rounded-lg border-2 border-yellow-500 bg-yellow-50 px-4 py-3 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⚠️</span>
+              <span className="font-medium">{sessionError}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Session Not Ready Indicator */}
+        {!sessionReady && gameStart && (
+          <div className="mb-4 rounded-lg border-2 border-blue-500 bg-blue-50 px-4 py-3 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+              <span className="font-medium">Waiting for quiz session to initialize...</span>
+            </div>
+          </div>
+        )}
 
         <QuestionContent
           question={currentQuestion.question}

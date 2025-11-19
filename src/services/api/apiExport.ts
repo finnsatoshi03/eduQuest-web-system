@@ -69,49 +69,62 @@ export async function exportQuizResultsToExcel(
 
     const quizMetadata: QuizMetadata = quizData;
 
-    // 2. Fetch student results from quiz_history (permanent storage) with retry logic
+    // 2. Fetch student results from quiz_history (permanent storage)
     // Filter by BOTH quiz_id AND class_code to get only THIS game session
     // This prevents getting duplicate students from previous sessions of the same quiz
 
-    console.log("⏳ Waiting for quiz history data to be available...");
+    console.log("📊 Fetching quiz history data...");
 
+    // With atomic RPC implementation, data should be available immediately
+    // Only do ONE fallback retry after 1 second for edge cases
     let studentsData: any[] | null = null;
-    let retryCount = 0;
-    const maxRetries = 5;
-    const retryDelay = 1000; // 1 second
+    let attempt = 0;
 
-    // Retry fetching quiz_history data in case sendEndGame hasn't finished yet
-    while (retryCount < maxRetries) {
+    while (attempt < 2) {
+      // Max 2 attempts (immediate + 1 retry)
       const { data, error: studentsError } = await supabase
         .from("quiz_history")
         .select("*")
         .eq("quiz_id", quizId)
         .eq("class_code", classCode)
+        .order("completed_at", { ascending: false }) // Get most recent session first
         .order("placement", { ascending: true });
 
       if (studentsError) {
-        throw new Error("Error fetching student results");
+        console.error("❌ Error fetching student results:", studentsError);
+        throw new Error(`Error fetching student results: ${studentsError.message}`);
       }
 
       if (data && data.length > 0) {
-        studentsData = data;
-        console.log(`✅ Found ${data.length} student records for this game session`);
+        // Get the most recent session_id from the first record
+        const mostRecentSessionId = data[0].session_id;
+
+        // Filter to only include records from the most recent session
+        // This ensures we don't mix data from multiple sessions if there are retakes
+        studentsData = mostRecentSessionId
+          ? data.filter((record) => record.session_id === mostRecentSessionId)
+          : data;
+
+        console.log(
+          `✅ Found ${studentsData.length} student records for session ${mostRecentSessionId}`
+        );
         break;
       }
 
-      retryCount++;
-      if (retryCount < maxRetries) {
-        console.log(`⏳ No data yet. Retry ${retryCount}/${maxRetries}...`);
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      attempt++;
+      if (attempt < 2) {
+        console.log("⏳ No data found. Waiting 1 second before retry...");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
     if (!studentsData || studentsData.length === 0) {
-      console.warn("⚠️ No student data found in quiz_history after retries");
-      console.warn("This might mean:");
+      console.warn("⚠️ No student data found in quiz_history");
+      console.warn("Possible reasons:");
       console.warn("1. No students took the quiz");
-      console.warn("2. The quiz_history table doesn't exist (run migration)");
-      console.warn("3. RLS policies are blocking access");
+      console.warn("2. Quiz was not properly ended (run sendEndGame)");
+      console.warn("3. RLS policies are blocking access (run 002_fix_quiz_history_rls_policies.sql)");
+      console.warn("4. Atomic RPC failed (check Supabase logs)");
       // Continue anyway to at least export quiz metadata and questions
     }
 
@@ -129,33 +142,21 @@ export async function exportQuizResultsToExcel(
     }
 
     // 4. Fetch all individual answers for THIS game session only
-    // Filter by quiz_id, class_code, AND timestamp to avoid getting answers from retakes
+    // Filter by session_id to get ONLY answers from this specific game session
     console.log("📊 Fetching answers for quiz:", quizId, "session:", classCode);
 
-    // Get the latest completed_at timestamp for this session from quiz_history
-    // This helps filter answers to only those from THIS specific game session
-    let sessionEndTime: string | null = null;
-    let sessionStartTime: string | null = null;
+    // Get the session_id from the quiz_history data
+    let sessionId: string | null = null;
 
     if (studentsData && studentsData.length > 0) {
-      // All students in a session have the same completed_at time
-      sessionEndTime = studentsData[0].completed_at;
-
-      // Calculate approximate start time (assume max quiz duration is 2 hours)
-      const endDate = new Date(sessionEndTime);
-      const startDate = new Date(endDate.getTime() - 2 * 60 * 60 * 1000); // 2 hours before
-      sessionStartTime = startDate.toISOString();
-
-      console.log("📅 Session time window:", {
-        start: sessionStartTime,
-        end: sessionEndTime,
-      });
+      sessionId = studentsData[0].session_id;
+      console.log("🎯 Using session_id for filtering:", sessionId);
     }
 
     let answersData: any[] | null = null;
 
-    if (sessionStartTime && sessionEndTime) {
-      // Fetch answers within the session time window
+    if (sessionId) {
+      // Fetch answers ONLY for this session_id (unique per game session)
       const { data, error: answersError } = await supabase
         .from("quiz_student_answers")
         .select(
@@ -165,9 +166,7 @@ export async function exportQuizResultsToExcel(
         `,
         )
         .eq("quiz_id", quizId)
-        .eq("class_code", classCode)
-        .gte("answered_at", sessionStartTime)
-        .lte("answered_at", sessionEndTime);
+        .eq("session_id", sessionId); // Filter by session_id instead of class_code
 
       if (answersError) {
         console.error("❌ Error fetching individual answers:", answersError);
@@ -175,11 +174,11 @@ export async function exportQuizResultsToExcel(
 
       answersData = data;
       console.log(
-        `📝 Found ${answersData?.length || 0} answer records for this game session (filtered by timestamp)`,
+        `📝 Found ${answersData?.length || 0} answer records for session ${sessionId}`,
       );
     } else {
-      // Fallback: fetch all answers for this quiz+class_code (old behavior)
-      console.warn("⚠️ No session timestamp available. Fetching all answers (may include retakes)");
+      // Fallback: No session_id available (old data or migration incomplete)
+      console.warn("⚠️ No session_id available. Using class_code filter (may include retakes)");
 
       const { data, error: answersError } = await supabase
         .from("quiz_student_answers")
@@ -197,7 +196,7 @@ export async function exportQuizResultsToExcel(
       }
 
       answersData = data;
-      console.log(`📝 Found ${answersData?.length || 0} answer records (unfiltered)`);
+      console.log(`📝 Found ${answersData?.length || 0} answer records (fallback mode)`);
     }
 
     // Debug: Check if student names are present

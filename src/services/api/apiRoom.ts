@@ -36,19 +36,26 @@ export async function startGame(
       throw new Error("Game is already in progress");
     }
 
+    // Generate a unique session ID for this game instance
+    const sessionId = crypto.randomUUID();
+    console.log("🎮 Starting new game session:", sessionId);
+
     await supabase
       .from("quiz")
-      .update({ status: "in game" })
+      .update({
+        status: "in game",
+        current_session_id: sessionId
+      })
       .eq("class_code", classCode);
 
     const channel = supabase.channel("room1");
     channel.send({
       type: "broadcast",
       event: "quiz-game-started",
-      payload: { classCode },
+      payload: { classCode, sessionId },
     });
     channel.unsubscribe();
-    console.log(`Game started for quiz ID: ${classCode}`);
+    console.log(`Game started for quiz ID: ${classCode}, Session: ${sessionId}`);
   } catch (error) {
     console.error("Error starting game:", error);
     throw error;
@@ -465,96 +472,111 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
   endGame(classCode);
 
   try {
-    console.log("🔄 Starting game end process for class:", classCode);
+    console.log("🔄 Starting ATOMIC game end process for class:", classCode);
 
-    // STEP 1: Copy quiz_students data to quiz_history BEFORE deleting
-    const { data: quizStudents, error: fetchError } = await supabase
-      .from("quiz_students")
-      .select("*")
-      .eq("class_code", classCode);
+    // Get quiz_id and current_session_id
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("quiz_id, current_session_id")
+      .eq("class_code", classCode)
+      .single();
 
-    if (fetchError) {
-      console.error("❌ Error fetching quiz students:", fetchError);
+    if (quizError || !quizData) {
+      console.error("❌ Error fetching quiz data:", quizError);
       return false;
     }
 
-    console.log(`📊 Found ${quizStudents?.length || 0} students to save to history`);
+    const { quiz_id: quizId, current_session_id: sessionId } = quizData;
 
-    if (quizStudents && quizStudents.length > 0) {
-      // Get quiz_id from class_code
-      const { data: quizData, error: quizError } = await supabase
-        .from("quiz")
-        .select("quiz_id")
-        .eq("class_code", classCode)
-        .single();
+    if (!sessionId) {
+      console.error("❌ No session_id found for this quiz - cannot finalize");
+      console.error("This means the quiz was never properly started");
+      return false;
+    }
 
-      if (quizError) {
-        console.error("❌ Error fetching quiz data:", quizError);
-        return false;
-      }
+    console.log("📝 Quiz ID:", quizId);
+    console.log("🎯 Session ID:", sessionId);
 
-      const quizId = quizData?.quiz_id;
-      console.log("📝 Quiz ID:", quizId);
+    // Call the atomic RPC function with retry logic
+    let lastError = null;
+    const maxRetries = 3;
 
-      // Prepare history records
-      const historyRecords = quizStudents.map((student) => ({
-        quiz_id: quizId,
-        class_code: classCode,
-        quiz_student_id: student.quiz_student_id,
-        student_name: student.student_name,
-        student_email: student.student_email,
-        student_avatar: student.student_avatar,
-        score: student.score || 0,
-        right_answer: student.right_answer || 0,
-        wrong_answer: student.wrong_answer || 0,
-        placement: student.placement || 0,
-        quiz_taken: true,
-        completed_at: new Date().toISOString(),
-      }));
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`🔄 Attempt ${attempt}/${maxRetries} to finalize game...`);
 
-      console.log("💾 Attempting to save to quiz_history table...");
+      try {
+        const { data: result, error: rpcError } = await supabase.rpc(
+          "rpc_end_game_atomic",
+          {
+            p_class_code: classCode,
+            p_quiz_id: quizId,
+            p_session_id: sessionId,
+          }
+        );
 
-      // Insert into quiz_history
-      const { error: insertError } = await supabase
-        .from("quiz_history")
-        .insert(historyRecords);
+        if (rpcError) {
+          console.error(`❌ RPC Error on attempt ${attempt}:`, rpcError);
+          lastError = rpcError;
 
-      if (insertError) {
-        console.error("❌ CRITICAL: Failed to save quiz history!");
-        console.error("Error details:", insertError);
+          // Check for specific error codes
+          if (rpcError.code === "42501") {
+            console.error("🔒 RLS POLICY ERROR: Row Level Security blocking operation");
+            console.error("FIX: Run 002_fix_quiz_history_rls_policies.sql migration");
+            break; // Don't retry RLS errors
+          } else if (rpcError.code === "42883") {
+            console.error("⚠️ RPC FUNCTION NOT FOUND: rpc_end_game_atomic doesn't exist");
+            console.error("FIX: Run 003_create_atomic_end_game_rpc.sql migration");
+            break; // Don't retry missing function errors
+          }
 
-        // Check for specific error codes
-        if (insertError.code === "42501") {
-          console.error("🔒 RLS POLICY ERROR: Row Level Security is blocking inserts to quiz_history");
-          console.error("FIX: Run migration_fix_rls_policies.sql in Supabase SQL Editor");
-        } else if (insertError.code === "42P01") {
-          console.error("📋 TABLE ERROR: quiz_history table doesn't exist");
-          console.error("FIX: Run migration_quiz_history.sql in Supabase SQL Editor");
+          // Exponential backoff for retryable errors
+          if (attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt) * 500; // 1s, 2s, 4s
+            console.log(`⏳ Retrying in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
         } else {
-          console.error("⚠️ UNKNOWN ERROR - Check Supabase logs for more details");
+          // Success!
+          console.log("✅ RPC Result:", result);
+
+          if (result && result.success) {
+            console.log(`✅ Successfully finalized game!`);
+            console.log(`   - Inserted: ${result.inserted_count} records to quiz_history`);
+            console.log(`   - Deleted: ${result.deleted_count} records from quiz_students`);
+            console.log(`   - Total students: ${result.total_students}`);
+
+            if (result.warning) {
+              console.warn("⚠️ Warning:", result.warning);
+            }
+
+            return true;
+          } else {
+            console.error("❌ RPC returned failure:", result?.error || "Unknown error");
+            lastError = result?.error;
+            return false;
+          }
         }
-        // Continue anyway - don't fail the game end
-      } else {
-        console.log(`✅ Successfully saved ${historyRecords.length} quiz results to history`);
+      } catch (error) {
+        console.error(`❌ Exception on attempt ${attempt}:`, error);
+        lastError = error;
+
+        if (attempt < maxRetries) {
+          const delayMs = Math.pow(2, attempt) * 500;
+          console.log(`⏳ Retrying in ${delayMs}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
       }
-    } else {
-      console.log("⚠️ No students found to save to history");
     }
 
-    // STEP 2: Now safe to delete quiz_students (answers are preserved)
-    const { error: deleteError } = await supabase
-      .from("quiz_students")
-      .delete()
-      .eq("class_code", classCode);
+    // If we get here, all retries failed
+    console.error("❌ CRITICAL: All attempts to finalize game failed!");
+    console.error("Last error:", lastError);
+    console.error("⚠️ DATA MAY BE IN INCONSISTENT STATE - Manual intervention may be required");
 
-    if (deleteError) {
-      console.error("Error removing students from quiz_students table:", deleteError);
-      return false;
-    }
-
-    return true;
+    return false;
   } catch (error) {
-    console.error("Error in sendEndGame:", error);
+    console.error("❌ Unexpected error in sendEndGame:", error);
     return false;
   }
 }
@@ -777,6 +799,22 @@ export async function updateLeaderBoard(
   wrongAns: number,
 ): Promise<LeaderboardEntry[]> {
   try {
+    // Get the current session_id from the quiz table
+    const { data: quizData } = await supabase
+      .from("quiz")
+      .select("current_session_id")
+      .eq("class_code", classCode)
+      .single();
+
+    const sessionId = quizData?.current_session_id;
+
+    // CRITICAL: Enforce valid session before updating leaderboard
+    // This prevents NULL session_id records that cause sync issues
+    if (!sessionId) {
+      console.error("🚫 BLOCKED: No active session_id for class_code:", classCode);
+      throw new Error("Quiz session not started. Cannot update leaderboard.");
+    }
+
     const { data: existingStudent, error: fetchError } = await supabase
       .from("quiz_students")
       .select("quiz_student_id, score")
@@ -799,9 +837,10 @@ export async function updateLeaderBoard(
           student_email: studentEmail,
           score: score,
           class_code: classCode,
+          session_id: sessionId,
         },
       ]);
-      console.log("New student added:", studentId);
+      console.log("New student added:", studentId, "Session:", sessionId);
     } else {
       await supabase
         .from("quiz_students")
@@ -809,12 +848,13 @@ export async function updateLeaderBoard(
           score: score,
           right_answer: rightAns,
           wrong_answer: wrongAns,
+          session_id: sessionId,
         })
         .match({
           quiz_student_id: studentId,
           class_code: classCode,
         });
-      console.log("Student score updated:", studentId);
+      console.log("Student score updated:", studentId, "Session:", sessionId);
     }
 
     const { data: allStudents } = await supabase
@@ -857,6 +897,23 @@ export async function submitAnswer(
   console.log("Answer is correct:", isCorrect);
 
   try {
+    // Get the current session_id from the quiz table
+    const { data: quizData } = await supabase
+      .from("quiz")
+      .select("current_session_id")
+      .eq("class_code", classCode)
+      .single();
+
+    const sessionId = quizData?.current_session_id;
+
+    // CRITICAL: Block answer submission if no valid session exists
+    // This prevents NULL session_id records that cause sync issues
+    if (!sessionId) {
+      console.error("🚫 BLOCKED: No active session_id for class_code:", classCode);
+      console.error("Quiz must be started before accepting answers");
+      throw new Error("Quiz session not started. Please wait for the professor to start the game.");
+    }
+
     // Get the quiz_students record for this student (includes id, name, email)
     const { data: quizStudent, error: fetchError } = await supabase
       .from("quiz_students")
@@ -876,7 +933,7 @@ export async function submitAnswer(
     }
 
     // Store the individual answer in quiz_student_answers table
-    // Include student_name, student_email, and class_code for permanent storage
+    // Include student_name, student_email, class_code, and session_id for permanent storage
     const { error: insertError } = await supabase
       .from("quiz_student_answers")
       .insert([
@@ -884,7 +941,8 @@ export async function submitAnswer(
           quiz_student_id: quizStudent?.id || studentId,
           quiz_id: quizId,
           quiz_question_id: questionId,
-          class_code: classCode, // Track which game session this answer belongs to
+          class_code: classCode, // Track which quiz this answer belongs to
+          session_id: sessionId, // Track which specific game session this answer belongs to
           student_answer: answer,
           is_correct: isCorrect,
           time_taken: timeTaken,
@@ -908,6 +966,8 @@ export async function submitAnswer(
         console.error("Error message:", insertError.message);
         if (insertError.message?.includes("class_code")) {
           console.error("🔧 FIX: Run migration_add_class_code_to_answers.sql in Supabase SQL Editor");
+        } else if (insertError.message?.includes("session_id")) {
+          console.error("🔧 FIX: session_id column is missing - should have been added in migration");
         } else {
           console.error("🔧 FIX: Run migration_quiz_answers_student_info.sql in Supabase SQL Editor");
         }
@@ -915,7 +975,7 @@ export async function submitAnswer(
         console.error("⚠️ UNKNOWN ERROR - Check Supabase logs for more details");
       }
     } else {
-      console.log("✅ Answer stored successfully with class_code:", classCode);
+      console.log("✅ Answer stored successfully - Session:", sessionId);
     }
   } catch (error) {
     console.error("❌ Exception storing individual answer:", error);
