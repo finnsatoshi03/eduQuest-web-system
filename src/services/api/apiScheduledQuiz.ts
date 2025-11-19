@@ -129,9 +129,10 @@ export async function checkScheduledQuizAccess(
   const openTime = quizData.open_time ? new Date(quizData.open_time) : null;
   const closeTime = quizData.close_time ? new Date(quizData.close_time) : null;
 
-  // Check if quiz is scheduled (including completed scheduled quizzes)
+  // Check if quiz is scheduled (including in-game and completed scheduled quizzes)
   if (
     quizData.status === QUIZ_STATUS.SCHEDULED ||
+    quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
     quizData.status === QUIZ_STATUS.SCHEDULED_COMPLETED
   ) {
     // Completed scheduled quizzes are not accessible for new participation
@@ -146,8 +147,19 @@ export async function checkScheduledQuizAccess(
       };
     }
 
-    // Check if professor has started the quiz (has session_id)
-    const isStarted = !!quizData.current_session_id;
+    // In-game scheduled quizzes are active and students can participate
+    if (quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME) {
+      return {
+        status: QUIZ_STATUS.SCHEDULED_IN_GAME,
+        isOpen: true,
+        message: "Quiz is in progress. You can participate now.",
+        openTime: openTime || undefined,
+        closeTime: closeTime || undefined,
+      };
+    }
+
+    // For SCHEDULED status (not yet started), always block students
+    // Professor must explicitly start the quiz (status changes to SCHEDULED_IN_GAME)
 
     if (openTime && now < openTime) {
       return {
@@ -169,27 +181,16 @@ export async function checkScheduledQuizAccess(
       };
     }
 
-    // Quiz is within time window
-    if (isStarted) {
-      // Professor has started the quiz - students can participate
-      return {
-        status: QUIZ_STATUS.SCHEDULED,
-        isOpen: true,
-        message: "Quiz is active. You can participate now.",
-        openTime: openTime || undefined,
-        closeTime: closeTime || undefined,
-      };
-    } else {
-      // Quiz is scheduled but professor hasn't started it yet
-      return {
-        status: QUIZ_STATUS.SCHEDULED,
-        isOpen: false,
-        message:
-          "This quiz is scheduled. Please wait for the professor to start it.",
-        openTime: openTime || undefined,
-        closeTime: closeTime || undefined,
-      };
-    }
+    // Quiz is within time window but professor hasn't started it yet
+    // Even if quiz has session_id, status must be SCHEDULED_IN_GAME for students to join
+    return {
+      status: QUIZ_STATUS.SCHEDULED,
+      isOpen: false,
+      message:
+        "This quiz has not started yet. Please wait for the professor to start the scheduled session.",
+      openTime: openTime || undefined,
+      closeTime: closeTime || undefined,
+    };
   }
 
   // Quiz is in game (live quiz) - students can participate
@@ -220,6 +221,8 @@ export async function startScheduledQuiz(
   userId: string,
 ): Promise<string> {
   try {
+    console.log("🔄 Starting scheduled quiz for:", classCode, userId);
+
     // Verify user is quiz owner
     const { data: quizData, error: quizError } = await supabase
       .from("quiz")
@@ -235,9 +238,10 @@ export async function startScheduledQuiz(
       throw new Error("Only the quiz owner can start the quiz");
     }
 
-    // Ensure quiz is in scheduled status (not completed)
+    // Ensure quiz is in scheduled status (not completed or already in-game)
     if (
       quizData.status !== QUIZ_STATUS.SCHEDULED &&
+      quizData.status !== QUIZ_STATUS.SCHEDULED_IN_GAME &&
       quizData.status !== QUIZ_STATUS.SCHEDULED_COMPLETED
     ) {
       throw new Error(
@@ -250,6 +254,16 @@ export async function startScheduledQuiz(
       throw new Error(
         "Cannot start quiz. This scheduled quiz has already been completed. You can view results instead.",
       );
+    }
+
+    // If already in-game, just return the existing session
+    if (quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME) {
+      if (quizData.current_session_id) {
+        console.log(
+          `⚠️ Scheduled quiz already in progress: ${quizData.current_session_id}. Returning existing session.`,
+        );
+        return quizData.current_session_id;
+      }
     }
 
     // Check if quiz is already started (has session_id)
@@ -279,16 +293,20 @@ export async function startScheduledQuiz(
       }
     }
 
+    console.log("🔄 Quiz is within time window. Generating session ID...");
+
     // Generate unique session ID for this game instance
     const sessionId = crypto.randomUUID();
     console.log("🎮 Starting scheduled quiz session:", sessionId);
 
-    // CRITICAL: Keep status as SCHEDULED, only set current_session_id
-    // This differentiates scheduled quizzes from live "in game" quizzes
+    // CRITICAL: Set status to SCHEDULED_IN_GAME when starting
+    // This differentiates in-progress scheduled quizzes from live "in game" quizzes
+
+    console.log("🔄 Updating quiz status to SCHEDULED_IN_GAME...");
     const { error: updateError } = await supabase
       .from("quiz")
       .update({
-        // Status remains SCHEDULED - do not change to IN_GAME
+        status: QUIZ_STATUS.SCHEDULED_IN_GAME,
         current_session_id: sessionId,
       })
       .eq("class_code", classCode);
@@ -296,6 +314,10 @@ export async function startScheduledQuiz(
     if (updateError) {
       throw new Error("Failed to start quiz session");
     }
+
+    console.log(
+      "🔄 Quiz status updated to SCHEDULED_IN_GAME. Broadcasting event...",
+    );
 
     // Broadcast event to all connected students
     const channel = supabase.channel("scheduled-quiz-room");
@@ -307,7 +329,7 @@ export async function startScheduledQuiz(
     channel.unsubscribe();
 
     console.log(
-      `✅ Scheduled quiz started (status remains SCHEDULED): ${classCode}, Session: ${sessionId}`,
+      `✅ Scheduled quiz started with status SCHEDULED_IN_GAME: ${classCode}, Session: ${sessionId}`,
     );
     return sessionId;
   } catch (error) {
@@ -428,16 +450,22 @@ export async function insertQuizStudent(
     throw new Error("Quiz not found");
   }
 
-  // CRITICAL: Allow SCHEDULED status if it has a session_id (professor started it)
-  // This enables scheduled quizzes to work without changing status to IN_GAME
+  // CRITICAL: Only allow SCHEDULED_IN_GAME or IN_GAME status
+  // Block SCHEDULED status even if it has a session_id - professor must explicitly start it
   const isScheduledQuizActive =
-    quizData.status === QUIZ_STATUS.SCHEDULED && !!quizData.current_session_id;
+    quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME &&
+    !!quizData.current_session_id;
   const isLiveQuizActive = quizData.status === QUIZ_STATUS.IN_GAME;
 
-  if (!isScheduledQuizActive && !isLiveQuizActive) {
+  // Provide specific error message for scheduled quizzes that haven't started
+  if (quizData.status === QUIZ_STATUS.SCHEDULED) {
     throw new Error(
-      "Cannot join quiz. The professor has not started the quiz yet.",
+      "This quiz has not started yet. Please wait for the professor to start the scheduled session.",
     );
+  }
+
+  if (!isScheduledQuizActive && !isLiveQuizActive) {
+    throw new Error("Cannot join quiz. The quiz is not currently active.");
   }
 
   if (!quizData.current_session_id) {
@@ -522,16 +550,23 @@ export async function submitScheduledAnswer(
       );
     }
 
-    // CRITICAL: Allow SCHEDULED status if it has a session_id (professor started it)
-    // This enables scheduled quizzes to accept answers without changing status to IN_GAME
+    // CRITICAL: Only allow SCHEDULED_IN_GAME or IN_GAME status
+    // Block SCHEDULED status even if it has a session_id - professor must explicitly start it
     const isScheduledQuizActive =
-      quizData.status === QUIZ_STATUS.SCHEDULED &&
+      quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME &&
       !!quizData.current_session_id;
     const isLiveQuizActive = quizData.status === QUIZ_STATUS.IN_GAME;
 
+    // Provide specific error message for scheduled quizzes that haven't started
+    if (quizData.status === QUIZ_STATUS.SCHEDULED) {
+      throw new Error(
+        "This quiz has not started yet. Please wait for the professor to start the scheduled session.",
+      );
+    }
+
     if (!isScheduledQuizActive && !isLiveQuizActive) {
       throw new Error(
-        `Cannot submit answer. Quiz status is ${quizData.status} and no active session found. Please wait for the professor to start the quiz.`,
+        `Cannot submit answer. Quiz status is ${quizData.status}. The quiz is not currently active.`,
       );
     }
 
@@ -661,14 +696,22 @@ export async function finalizeScheduledQuiz(
     }
 
     // Check if quiz is in a state that can be finalized
-    // CRITICAL: Scheduled quizzes remain SCHEDULED throughout participation
+    // CRITICAL: Scheduled quizzes use SCHEDULED_IN_GAME status when in progress
     // Only finalize if quiz has a session_id (was started by professor)
-    if (status !== QUIZ_STATUS.IN_GAME && status !== QUIZ_STATUS.SCHEDULED) {
+    if (
+      status !== QUIZ_STATUS.IN_GAME &&
+      status !== QUIZ_STATUS.SCHEDULED &&
+      status !== QUIZ_STATUS.SCHEDULED_IN_GAME
+    ) {
       console.log(`⚠️ Quiz status is ${status} - may already be finalized`);
     }
 
     // Ensure scheduled quiz has session_id before finalizing
-    if (status === QUIZ_STATUS.SCHEDULED && !sessionId) {
+    if (
+      (status === QUIZ_STATUS.SCHEDULED ||
+        status === QUIZ_STATUS.SCHEDULED_IN_GAME) &&
+      !sessionId
+    ) {
       throw new Error(
         "Cannot finalize scheduled quiz: No active session found. The quiz may not have been started properly.",
       );

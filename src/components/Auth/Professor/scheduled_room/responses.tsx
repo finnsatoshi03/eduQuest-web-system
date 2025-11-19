@@ -172,7 +172,7 @@ export default function Responses() {
         {/* Scheduled quizzes stay SCHEDULED until finalized (status becomes SCHEDULED_COMPLETED) */}
         {!isFinalized &&
           (quizStatus === QUIZ_STATUS.SCHEDULED ||
-            quizStatus === QUIZ_STATUS.IN_GAME) && (
+            quizStatus === QUIZ_STATUS.SCHEDULED_IN_GAME) && (
             <Button
               onClick={handleFinalize}
               disabled={

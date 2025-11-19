@@ -5,6 +5,7 @@ export const QUIZ_STATUS = {
   DRAFT: "draft",
   ACTIVE: "active",
   SCHEDULED: "scheduled",
+  SCHEDULED_IN_GAME: "scheduled-in-game",
   SCHEDULED_COMPLETED: "scheduled-completed",
   IN_LOBBY: "in lobby",
   IN_GAME: "in game",
@@ -26,13 +27,14 @@ export function isQuizLive(status: QuizStatus): boolean {
 
 // Helper to check if quiz is in progress
 export function isQuizInProgress(status: QuizStatus): boolean {
-  return status === QUIZ_STATUS.IN_GAME;
+  return status === QUIZ_STATUS.IN_GAME || status === QUIZ_STATUS.SCHEDULED_IN_GAME;
 }
 
-// Helper to check if quiz is scheduled (including completed scheduled quizzes)
+// Helper to check if quiz is scheduled (including in-game and completed scheduled quizzes)
 export function isScheduledQuiz(status: QuizStatus): boolean {
   return (
     status === QUIZ_STATUS.SCHEDULED ||
+    status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
     status === QUIZ_STATUS.SCHEDULED_COMPLETED
   );
 }

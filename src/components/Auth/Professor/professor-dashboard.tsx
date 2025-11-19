@@ -68,9 +68,15 @@ const QuizCard: React.FC<QuizCardProps> = ({
   onClone,
   nav,
 }) => {
+  const queryClient = useQueryClient();
+
   const { mutate: mutateQuizStatus, isPending: isLoading } = useMutation({
     mutationFn: ({ quizId, status }: { quizId: string; status: QuizStatus }) =>
       updateQuizStatus(quizId, status),
+    onSuccess: () => {
+      // Invalidate queries to refresh dashboard with updated status
+      queryClient.invalidateQueries({ queryKey: ["quizzes", user.id] });
+    },
     onError: (error) => {
       toast.error(`Failed to update quiz status: ${error.message}`);
     },
@@ -100,6 +106,10 @@ const QuizCard: React.FC<QuizCardProps> = ({
     try {
       await startScheduledQuiz(quiz.class_code, user.id);
       toast.success("Scheduled quiz started successfully!");
+
+      // Invalidate queries to refresh dashboard with updated status
+      queryClient.invalidateQueries({ queryKey: ["quizzes", user.id] });
+
       // Navigate to responses page where professor can monitor student progress
       nav(`professor/class/${quiz.class_code}/responses`);
     } catch (error) {
@@ -188,23 +198,28 @@ const QuizCard: React.FC<QuizCardProps> = ({
               quiz.status === QUIZ_STATUS.DRAFT
                 ? "bg-red-300 text-red-700"
                 : (quiz.status === QUIZ_STATUS.SCHEDULED ||
+                      quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
                       quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
                     timeStatus === "closed"
                   ? "bg-gray-300 text-gray-700"
                   : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
                     ? "bg-green-300 text-green-700"
-                    : quiz.status === QUIZ_STATUS.SCHEDULED
-                      ? "bg-yellow-300 text-yellow-700"
-                      : quiz.status === QUIZ_STATUS.IN_GAME
-                        ? "bg-blue-300 text-blue-700"
-                        : "bg-green-300 text-green-700"
+                    : quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME
+                      ? "bg-blue-300 text-blue-700"
+                      : quiz.status === QUIZ_STATUS.SCHEDULED
+                        ? "bg-yellow-300 text-yellow-700"
+                        : quiz.status === QUIZ_STATUS.IN_GAME
+                          ? "bg-blue-300 text-blue-700"
+                          : "bg-green-300 text-green-700"
             }`}
           >
             {timeStatus === "closed"
               ? "Closed"
               : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
                 ? "Scheduled (Completed)"
-                : quiz.status}
+                : quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME
+                  ? "In Progress"
+                  : quiz.status}
           </p>
           <h3 className="text-lg font-bold">{quiz.title}</h3>
           <div className="flex items-center gap-1 text-xs opacity-60 md:text-sm">
@@ -218,6 +233,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
             </p>
           </div>
           {(quiz.status === QUIZ_STATUS.SCHEDULED ||
+            quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
             quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
             quiz.open_time && (
               <div className="flex flex-col gap-1">
@@ -327,6 +343,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
             </>
           )}
           {(quiz.status === QUIZ_STATUS.SCHEDULED ||
+            quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
             quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) && (
             <>
               {quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED ? (
@@ -337,6 +354,15 @@ const QuizCard: React.FC<QuizCardProps> = ({
                 >
                   <UsersRound size={14} />
                   View Results
+                </Button>
+              ) : quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ? (
+                // Scheduled quiz in progress - only show check responses
+                <Button
+                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                  onClick={handleResponses}
+                >
+                  <UsersRound size={14} />
+                  Monitor Responses
                 </Button>
               ) : timeStatus === "upcoming" ? (
                 // Scheduled but not yet ready
@@ -444,11 +470,12 @@ export default function ProfessorDashboard() {
   const activeQuizzes = safeQuizzes.filter(
     (quiz) => quiz.status === QUIZ_STATUS.ACTIVE,
   );
-  // CRITICAL: Include both SCHEDULED and SCHEDULED_COMPLETED in scheduled tab
-  // This keeps finalized scheduled quizzes in the scheduled category
+  // CRITICAL: Include SCHEDULED, SCHEDULED_IN_GAME, and SCHEDULED_COMPLETED in scheduled tab
+  // This keeps all scheduled quizzes (pending, in-progress, and completed) in the scheduled category
   const scheduledQuizzes = safeQuizzes.filter(
     (quiz) =>
       quiz.status === QUIZ_STATUS.SCHEDULED ||
+      quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
       quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED,
   );
   const draftQuizzes = safeQuizzes.filter(
