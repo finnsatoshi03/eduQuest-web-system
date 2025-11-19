@@ -27,7 +27,7 @@ export default function SubjectBreakdown({ subjects }: SubjectBreakdownProps) {
           <CardTitle>Subject Performance</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+          <div className="text-muted-foreground flex flex-col items-center justify-center py-8">
             <BookOpen className="mb-2 h-12 w-12" />
             <p className="text-sm">No subject data available</p>
           </div>
@@ -40,11 +40,11 @@ export default function SubjectBreakdown({ subjects }: SubjectBreakdownProps) {
     <Card>
       <CardHeader>
         <CardTitle>Performance by Subject</CardTitle>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Your performance across different subjects
         </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-h-[300px] overflow-y-auto">
         <div className="space-y-4">
           {subjects.map((subject) => (
             <div
@@ -53,7 +53,7 @@ export default function SubjectBreakdown({ subjects }: SubjectBreakdownProps) {
             >
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
+                  <BookOpen className="text-primary h-5 w-5" />
                   <h3 className="font-semibold">{subject.subject}</h3>
                 </div>
                 <Badge variant="secondary">{subject.quiz_count} quizzes</Badge>
@@ -76,7 +76,7 @@ export default function SubjectBreakdown({ subjects }: SubjectBreakdownProps) {
                     <span className="font-semibold">
                       {subject.average_accuracy.toFixed(1)}%
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       ({getPerformanceLabel(subject.average_accuracy)})
                     </span>
                   </div>

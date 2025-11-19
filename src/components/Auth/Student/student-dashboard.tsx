@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from "react";
 import { Loader2, Filter, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthProvider";
 import { joinRoom } from "@/services/api/apiRoom";
 import { StudentQuizHistory } from "@/services/api/apiStudent";
-import { useStudentDashboard, useFilteredQuizHistory } from "@/hooks/useStudentDashboard";
+import {
+  useStudentDashboard,
+  useFilteredQuizHistory,
+} from "@/hooks/useStudentDashboard";
 import StatisticsCards from "./Dashboard/StatisticsCards";
 import QuizHistoryTable from "./Dashboard/QuizHistoryTable";
 import PerformanceChart from "./Dashboard/PerformanceChart";
@@ -73,7 +77,7 @@ const AnimalIconInput: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/20 bg-primary/5 p-8">
+    <div className="border-primary/20 bg-primary/5 flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8">
       <div className="text-indigo-500">
         {isJoining ? (
           <Loader2 size={80} className="mb-4 animate-spin" />
@@ -117,14 +121,18 @@ const AnimalIconInput: React.FC = () => {
 
 const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [selectedQuiz, setSelectedQuiz] = useState<StudentQuizHistory | null>(null);
+  const [selectedQuiz, setSelectedQuiz] = useState<StudentQuizHistory | null>(
+    null,
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Use custom hook for dashboard data
-  const { history, stats, subjects, isLoading, refetch } = useStudentDashboard(user?.id);
+  const { history, stats, subjects, isLoading, refetch } = useStudentDashboard(
+    user?.id,
+  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -152,7 +160,7 @@ const StudentDashboard: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <Loader2 className="text-primary h-12 w-12 animate-spin" />
       </div>
     );
   }
@@ -173,7 +181,9 @@ const StudentDashboard: React.FC = () => {
           disabled={isRefreshing}
           className="gap-2"
         >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+          />
           {isRefreshing ? "Refreshing..." : "Refresh Data"}
         </Button>
       </div>
@@ -200,7 +210,10 @@ const StudentDashboard: React.FC = () => {
               <Filter className="h-4 w-4" />
               <span className="text-sm font-medium">Filters:</span>
             </div>
-            <Select value={timeFilter} onValueChange={(value: any) => setTimeFilter(value)}>
+            <Select
+              value={timeFilter}
+              onValueChange={(value: any) => setTimeFilter(value)}
+            >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Time filter" />
               </SelectTrigger>

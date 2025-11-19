@@ -41,7 +41,7 @@ export default function QuizDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl !text-black dark:!text-white">
         <DialogHeader>
           <DialogTitle className="text-2xl">{quiz.quiz_title}</DialogTitle>
           <DialogDescription>
@@ -57,9 +57,7 @@ export default function QuizDetailModal({
             <div className="rounded-lg border p-4 text-center">
               <Trophy className="mx-auto mb-2 h-6 w-6 text-yellow-600" />
               <p className="text-2xl font-bold">{quiz.score}</p>
-              <p className="text-xs text-muted-foreground">
-                Score / {quiz.total_points}
-              </p>
+              <p className="text-xs">Score / {quiz.total_points}</p>
             </div>
 
             <div className="rounded-lg border p-4 text-center">
@@ -67,7 +65,7 @@ export default function QuizDetailModal({
               <p className={`text-2xl font-bold ${accuracyColor}`}>
                 {quiz.accuracy}%
               </p>
-              <p className="text-xs text-muted-foreground">Accuracy</p>
+              <p className="text-xs">Accuracy</p>
             </div>
 
             <div className="rounded-lg border p-4 text-center">
@@ -75,7 +73,7 @@ export default function QuizDetailModal({
               <p className="text-2xl font-bold text-green-600">
                 {quiz.right_answer}
               </p>
-              <p className="text-xs text-muted-foreground">Correct</p>
+              <p className="text-xs">Correct</p>
             </div>
 
             <div className="rounded-lg border p-4 text-center">
@@ -83,7 +81,7 @@ export default function QuizDetailModal({
               <p className="text-2xl font-bold text-red-600">
                 {quiz.wrong_answer}
               </p>
-              <p className="text-xs text-muted-foreground">Incorrect</p>
+              <p className="text-xs">Incorrect</p>
             </div>
           </div>
 
@@ -92,16 +90,18 @@ export default function QuizDetailModal({
             <h3 className="font-semibold">Quiz Information</h3>
 
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Date Taken:</span>
+              <span className="">Date Taken:</span>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                <span className="font-medium">{formatDate(quiz.created_at)}</span>
+                <span className="font-medium">
+                  {formatDate(quiz.created_at)}
+                </span>
               </div>
             </div>
 
             {quiz.placement > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Your Rank:</span>
+                <span className="">Your Rank:</span>
                 <Badge
                   variant={
                     quiz.placement === 1
@@ -117,7 +117,7 @@ export default function QuizDetailModal({
             )}
 
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Quiz Status:</span>
+              <span className="">Quiz Status:</span>
               <Badge variant={quiz.quiz_taken ? "default" : "outline"}>
                 {quiz.quiz_taken ? "Completed" : "In Progress"}
               </Badge>
@@ -133,7 +133,7 @@ export default function QuizDetailModal({
           {/* Performance Analysis */}
           <div className="rounded-lg border p-4">
             <h3 className="mb-2 font-semibold">Performance Analysis</h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm">
               {quiz.accuracy >= 90 && (
                 <>
                   Outstanding performance! You've demonstrated excellent
