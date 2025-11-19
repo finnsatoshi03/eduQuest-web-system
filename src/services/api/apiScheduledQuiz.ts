@@ -1,5 +1,6 @@
 import { QuizQuestions, User } from "@/lib/types";
 import supabase from "../supabase";
+import { QUIZ_STATUS } from "@/lib/constants/quizStatus";
 
 interface QuizStatusResponse {
   hasTaken: boolean;
@@ -10,6 +11,14 @@ interface QuizStudentData {
   class_code: string;
   quiz_id: string;
   quiz_taken: boolean;
+}
+
+export interface ScheduledQuizStatus {
+  status: string;
+  isOpen: boolean;
+  message?: string;
+  openTime?: Date;
+  closeTime?: Date;
 }
 
 export async function getQuestionsForScheduledQuiz(
@@ -97,8 +106,166 @@ export async function getQuizById(classCode: string) {
 }
 
 /**
+ * Check if a scheduled quiz can be accessed without modifying its state
+ * Returns status information and validation results
+ */
+export async function checkScheduledQuizAccess(
+  classCode: string,
+): Promise<ScheduledQuizStatus> {
+  const { data: quizData, error: quizError } = await supabase
+    .from("quiz")
+    .select("quiz_id, status, open_time, close_time")
+    .eq("class_code", classCode)
+    .single();
+
+  if (quizError || !quizData) {
+    throw new Error("Quiz not found");
+  }
+
+  const now = new Date();
+  const openTime = quizData.open_time ? new Date(quizData.open_time) : null;
+  const closeTime = quizData.close_time ? new Date(quizData.close_time) : null;
+
+  // Check if quiz is scheduled but not yet started by professor
+  if (quizData.status === QUIZ_STATUS.SCHEDULED) {
+    if (openTime && now < openTime) {
+      return {
+        status: QUIZ_STATUS.SCHEDULED,
+        isOpen: false,
+        message: `This quiz is scheduled and will open at ${openTime.toLocaleString()}. Please wait for the professor to start it.`,
+        openTime,
+        closeTime: closeTime || undefined,
+      };
+    }
+
+    if (closeTime && now > closeTime) {
+      return {
+        status: QUIZ_STATUS.SCHEDULED,
+        isOpen: false,
+        message: `This quiz has ended. It closed at ${closeTime.toLocaleString()}.`,
+        openTime: openTime || undefined,
+        closeTime,
+      };
+    }
+
+    // Quiz is within time window but still scheduled - needs professor to start
+    return {
+      status: QUIZ_STATUS.SCHEDULED,
+      isOpen: false,
+      message: "This quiz is scheduled. Please wait for the professor to start it.",
+      openTime: openTime || undefined,
+      closeTime: closeTime || undefined,
+    };
+  }
+
+  // Quiz is in game - students can participate
+  if (quizData.status === QUIZ_STATUS.IN_GAME) {
+    return {
+      status: QUIZ_STATUS.IN_GAME,
+      isOpen: true,
+      openTime: openTime || undefined,
+      closeTime: closeTime || undefined,
+    };
+  }
+
+  // Other statuses
+  return {
+    status: quizData.status,
+    isOpen: false,
+    message: `Quiz is currently ${quizData.status}`,
+  };
+}
+
+/**
+ * Start a scheduled quiz (called by professor)
+ * Changes status from "scheduled" to "in game" and creates session_id
+ */
+export async function startScheduledQuiz(
+  classCode: string,
+  userId: string,
+): Promise<string> {
+  try {
+    // Verify user is quiz owner
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("owner_id, status, open_time, close_time")
+      .eq("class_code", classCode)
+      .single();
+
+    if (quizError || !quizData) {
+      throw new Error("Quiz not found");
+    }
+
+    if (quizData.owner_id !== userId) {
+      throw new Error("Only the quiz owner can start the quiz");
+    }
+
+    // Ensure quiz is in scheduled status
+    if (quizData.status !== QUIZ_STATUS.SCHEDULED) {
+      throw new Error(
+        `Cannot start quiz. Current status: ${quizData.status}. Only scheduled quizzes can be started.`,
+      );
+    }
+
+    // Validate quiz is within the scheduled time window
+    if (quizData.open_time && quizData.close_time) {
+      const now = new Date();
+      const openTime = new Date(quizData.open_time);
+      const closeTime = new Date(quizData.close_time);
+
+      if (now < openTime) {
+        throw new Error(
+          `Cannot start quiz yet. It will be available starting ${openTime.toLocaleString()}.`,
+        );
+      }
+
+      if (now > closeTime) {
+        throw new Error(
+          `Cannot start quiz. It closed at ${closeTime.toLocaleString()}.`,
+        );
+      }
+    }
+
+    // Generate unique session ID for this game instance
+    const sessionId = crypto.randomUUID();
+    console.log("🎮 Starting scheduled quiz session:", sessionId);
+
+    // Update status to IN_GAME and set session_id
+    const { error: updateError } = await supabase
+      .from("quiz")
+      .update({
+        status: QUIZ_STATUS.IN_GAME,
+        current_session_id: sessionId,
+      })
+      .eq("class_code", classCode);
+
+    if (updateError) {
+      throw new Error("Failed to start quiz session");
+    }
+
+    // Broadcast event to all connected students
+    const channel = supabase.channel("scheduled-quiz-room");
+    channel.send({
+      type: "broadcast",
+      event: "scheduled-quiz-started",
+      payload: { classCode, sessionId },
+    });
+    channel.unsubscribe();
+
+    console.log(
+      `✅ Scheduled quiz started: ${classCode}, Session: ${sessionId}`,
+    );
+    return sessionId;
+  } catch (error) {
+    console.error("Error starting scheduled quiz:", error);
+    throw error;
+  }
+}
+
+/**
  * Ensures a scheduled quiz has a valid session_id before students can join
  * Creates a new session if quiz is within time window and doesn't have one
+ * @deprecated Use checkScheduledQuizAccess() and startScheduledQuiz() instead
  */
 export async function ensureScheduledQuizSession(
   classCode: string,
@@ -186,9 +353,46 @@ export async function insertQuizStudent(
   classCode: string,
   name?: string,
 ) {
-  // Ensure session exists and quiz is within time window
-  // This will throw an error if quiz is not open or create a session if needed
-  const sessionId = await ensureScheduledQuizSession(classCode);
+  // Check quiz access status without modifying state
+  const quizStatus = await checkScheduledQuizAccess(classCode);
+
+  // Block registration if quiz is not in game
+  if (quizStatus.status === QUIZ_STATUS.SCHEDULED) {
+    throw new Error(
+      quizStatus.message ||
+        "This quiz is scheduled. Please wait for the professor to start it.",
+    );
+  }
+
+  if (!quizStatus.isOpen) {
+    throw new Error(
+      quizStatus.message || "This quiz is not currently available.",
+    );
+  }
+
+  // Get the current session_id from quiz
+  const { data: quizData, error: quizError } = await supabase
+    .from("quiz")
+    .select("current_session_id, status")
+    .eq("class_code", classCode)
+    .single();
+
+  if (quizError || !quizData) {
+    throw new Error("Quiz not found");
+  }
+
+  // Verify quiz is in game and has a valid session
+  if (quizData.status !== QUIZ_STATUS.IN_GAME) {
+    throw new Error(
+      "Cannot join quiz. The professor has not started the quiz yet.",
+    );
+  }
+
+  if (!quizData.current_session_id) {
+    throw new Error(
+      "No active session found. Please wait for the professor to start the quiz.",
+    );
+  }
 
   // Insert student with valid session_id
   const { data, error } = await supabase
@@ -201,7 +405,7 @@ export async function insertQuizStudent(
         student_email: user.email,
         student_avatar: user.avatar,
         quiz_taken: false,
-        session_id: sessionId,
+        session_id: quizData.current_session_id,
       },
     ])
     .select()
@@ -211,6 +415,9 @@ export async function insertQuizStudent(
     throw error;
   }
 
+  console.log(
+    `✅ Student registered for quiz: ${user.name}, Session: ${quizData.current_session_id}`,
+  );
   return data;
 }
 
@@ -246,6 +453,38 @@ export async function submitScheduledAnswer(
   timeTaken: number = 0,
 ): Promise<boolean> {
   try {
+    // CRITICAL: Validate quiz is in game before accepting answers
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("status, current_session_id")
+      .eq("class_code", classCode)
+      .single();
+
+    if (quizError || !quizData) {
+      throw new Error("Quiz not found");
+    }
+
+    // Block answer submission if quiz is still scheduled
+    if (quizData.status === QUIZ_STATUS.SCHEDULED) {
+      throw new Error(
+        "Cannot submit answer. The quiz is scheduled but not started. Please wait for the professor to start it.",
+      );
+    }
+
+    // Block answer submission if no valid session exists
+    if (!quizData.current_session_id) {
+      throw new Error(
+        "No active session found. Please wait for the professor to start the quiz.",
+      );
+    }
+
+    // Verify quiz is in game status
+    if (quizData.status !== QUIZ_STATUS.IN_GAME) {
+      throw new Error(
+        `Cannot submit answer. Quiz status is ${quizData.status}. Only active quizzes accept answers.`,
+      );
+    }
+
     // Get the correct answer from the database
     const { data: questionData } = await supabase
       .from("quiz_questions")
@@ -265,24 +504,33 @@ export async function submitScheduledAnswer(
       })
       .maybeSingle();
 
+    // Ensure student is registered for this quiz
+    if (!quizStudent) {
+      throw new Error(
+        "Student not registered for this quiz. Please join the quiz first.",
+      );
+    }
+
     // Store the individual answer in quiz_student_answers table
-    // Include student_name, student_email, and class_code for permanent storage
     await supabase.from("quiz_student_answers").insert([
       {
-        quiz_student_id: quizStudent?.id || studentId,
+        quiz_student_id: quizStudent.id,
         quiz_id: quizId,
         quiz_question_id: questionId,
-        class_code: classCode, // Track which game session this answer belongs to
+        class_code: classCode,
+        session_id: quizData.current_session_id, // Track session for this answer
         student_answer: answer,
         is_correct: isCorrect,
         time_taken: timeTaken,
         answered_at: new Date().toISOString(),
-        student_name: quizStudent?.student_name || "Unknown",
-        student_email: quizStudent?.student_email || null,
+        student_name: quizStudent.student_name,
+        student_email: quizStudent.student_email,
       },
     ]);
 
-    console.log("Individual answer stored successfully for scheduled quiz");
+    console.log(
+      `✅ Answer stored - Session: ${quizData.current_session_id}, Correct: ${isCorrect}`,
+    );
     return isCorrect;
   } catch (error) {
     console.error("Error storing individual answer for scheduled quiz:", error);

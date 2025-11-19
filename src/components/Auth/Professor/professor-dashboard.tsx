@@ -32,6 +32,7 @@ import {
   deleteQuiz,
   updateQuizStatus,
 } from "@/services/api/apiQuiz";
+import { startScheduledQuiz } from "@/services/api/apiScheduledQuiz";
 import { Quiz, User } from "@/lib/types";
 import toast from "react-hot-toast";
 import { useProfessorOverallStats } from "@/hooks/useProfessorAnalytics";
@@ -82,6 +83,23 @@ const QuizCard: React.FC<QuizCardProps> = ({
   const handleStartGame = () => {
     nav(`professor/class/${quiz.class_code}/gamelobby`);
     mutateQuizStatus({ quizId: quiz.quiz_id, status: QUIZ_STATUS.IN_LOBBY });
+  };
+
+  const handleStartScheduledQuiz = async () => {
+    if (!quiz.class_code || !user?.id) return;
+
+    try {
+      await startScheduledQuiz(quiz.class_code, user.id);
+      toast.success("Scheduled quiz started successfully!");
+      // Navigate to responses page where professor can monitor student progress
+      nav(`professor/class/${quiz.class_code}/responses`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to start scheduled quiz",
+      );
+    }
   };
 
   const handleResponses = () =>
@@ -286,6 +304,30 @@ const QuizCard: React.FC<QuizCardProps> = ({
                   <Pen size={14} />
                   Edit Quiz
                 </Button>
+              ) : timeStatus === "ready" ? (
+                <>
+                  <Button
+                    className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                    onClick={handleStartScheduledQuiz}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Play size={14} />
+                        Start Quiz
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                    onClick={handleResponses}
+                  >
+                    <UsersRound size={14} />
+                    Check Responses
+                  </Button>
+                </>
               ) : (
                 <Button
                   className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"

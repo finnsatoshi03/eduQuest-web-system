@@ -9,6 +9,7 @@ import {
   checkQuizStatus,
   getQuizStudent,
   insertQuizStudent,
+  checkScheduledQuizAccess,
 } from "@/services/api/apiScheduledQuiz";
 import GameForm from "../quiz_room/game-form";
 import { formatUTCToLocalDisplay } from "@/lib/helpers";
@@ -52,7 +53,7 @@ const ScheduledQuizInfo: React.FC<{
   onStartQuiz: () => void;
   isStarting?: boolean;
 }> = ({ quizData, quizStatus, onStartQuiz, isStarting = false }) => {
-  const [timeUntilOpen, setTimeUntilOpen] = React.useState<number>(0);
+  const [, setTimeUntilOpen] = React.useState<number>(0);
   const [countdown, setCountdown] = React.useState<string>("");
 
   const now = new Date();
@@ -157,6 +158,12 @@ const ScheduledQuizInfo: React.FC<{
               You have already taken this quiz, but retakes are allowed.
             </p>
           )}
+          <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+            <p className="text-sm text-blue-700 dark:text-blue-400">
+              The quiz is within its scheduled time window. Click the button
+              below when your professor starts the quiz.
+            </p>
+          </div>
           <Button onClick={onStartQuiz} className="mt-4" disabled={isStarting}>
             {isStarting
               ? "Starting..."
@@ -311,20 +318,33 @@ const ScheduledQuizRoute: React.FC = () => {
 
     setIsStartingQuiz(true);
     try {
+      // First, check if the quiz is actually open and ready
+      const accessStatus = await checkScheduledQuizAccess(classId);
+
+      // Block if quiz is still scheduled (professor hasn't started it)
+      if (!accessStatus.isOpen) {
+        toast.error(
+          accessStatus.message ||
+            "This quiz is not available yet. Please wait for the professor to start it.",
+        );
+        setIsStartingQuiz(false);
+        return;
+      }
+
       // Check if student already exists in quiz_students
       const existingStudent = await getQuizStudent(classId, user.id);
 
-      // If student doesn't exist, insert them (this will ensure session exists and validate time window)
+      // If student doesn't exist, insert them (requires quiz to be in "in game" status)
       if (!existingStudent) {
         await insertQuizStudent(user, classId, displayName || user.name);
-        console.log("Student successfully enrolled in scheduled quiz");
+        console.log("✅ Student successfully enrolled in scheduled quiz");
       }
 
       // Start the quiz
       setShowQuiz(true);
       setGameStarted(true);
     } catch (error) {
-      console.error("Error starting quiz:", error);
+      console.error("❌ Error starting quiz:", error);
       const errorMessage =
         error instanceof Error
           ? error.message
