@@ -173,3 +173,103 @@ export const shuffleArray = <T>(array: T[]): T[] => {
   }
   return shuffled;
 };
+
+/**
+ * Converts a datetime-local input value (in user's local timezone) to UTC ISO string
+ * @param localDatetimeString - String from datetime-local input (format: "YYYY-MM-DDTHH:mm")
+ * @returns ISO string in UTC timezone
+ */
+export function convertLocalToUTC(localDatetimeString: string): string {
+  if (!localDatetimeString) return "";
+  const localDate = new Date(localDatetimeString);
+  return localDate.toISOString();
+}
+
+/**
+ * Converts a UTC ISO string to datetime-local input format (in user's local timezone)
+ * @param utcISOString - ISO string in UTC timezone
+ * @returns String formatted for datetime-local input (format: "YYYY-MM-DDTHH:mm")
+ */
+export function convertUTCToLocal(utcISOString: string): string {
+  if (!utcISOString) return "";
+  const date = new Date(utcISOString);
+  // Format: "YYYY-MM-DDTHH:mm"
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+/**
+ * Formats a UTC ISO string to a human-readable local time
+ * @param utcISOString - ISO string in UTC timezone
+ * @returns Formatted string in user's local timezone
+ */
+export function formatUTCToLocalDisplay(utcISOString: string): string {
+  if (!utcISOString) return "";
+  const date = new Date(utcISOString);
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+  }).format(date);
+}
+
+/**
+ * Checks if a time range spans across midnight (overnight)
+ * @param startLocalString - Start datetime-local string
+ * @param endLocalString - End datetime-local string
+ * @returns true if the range spans across midnight
+ */
+export function isOvernightSchedule(
+  startLocalString: string,
+  endLocalString: string,
+): boolean {
+  if (!startLocalString || !endLocalString) return false;
+  const start = new Date(startLocalString);
+  const end = new Date(endLocalString);
+  return start.getDate() !== end.getDate() || start.getMonth() !== end.getMonth();
+}
+
+/**
+ * Checks if current UTC time is within the scheduled quiz window
+ * @param openTimeUTC - Quiz open time in UTC ISO string
+ * @param closeTimeUTC - Quiz close time in UTC ISO string
+ * @returns true if current time is within the window
+ */
+export function isQuizActive(
+  openTimeUTC: string | null,
+  closeTimeUTC: string | null,
+): boolean {
+  if (!openTimeUTC || !closeTimeUTC) return false;
+  const now = new Date();
+  const openDate = new Date(openTimeUTC);
+  const closeDate = new Date(closeTimeUTC);
+  return now >= openDate && now <= closeDate;
+}
+
+/**
+ * Gets the quiz availability status
+ * @param openTimeUTC - Quiz open time in UTC ISO string
+ * @param closeTimeUTC - Quiz close time in UTC ISO string
+ * @returns "not_started" | "active" | "ended"
+ */
+export function getQuizAvailabilityStatus(
+  openTimeUTC: string | null,
+  closeTimeUTC: string | null,
+): "not_started" | "active" | "ended" {
+  if (!openTimeUTC || !closeTimeUTC) return "ended";
+  const now = new Date();
+  const openDate = new Date(openTimeUTC);
+  const closeDate = new Date(closeTimeUTC);
+
+  if (now < openDate) return "not_started";
+  if (now > closeDate) return "ended";
+  return "active";
+}

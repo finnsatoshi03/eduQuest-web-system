@@ -3,24 +3,13 @@ import { Clock, Calendar, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { formatUTCToLocalDisplay } from "@/lib/helpers";
 
 interface ScheduledQuizInfo {
   openTime: string;
   closeTime: string;
   quizTitle?: string;
 }
-
-const formatDateTime = (dateString: string) => {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: true,
-  }).format(date);
-};
 
 const TimeDisplay: React.FC<{
   label: string;
@@ -31,7 +20,7 @@ const TimeDisplay: React.FC<{
     <div className="text-indigo-500">{icon}</div>
     <div>
       <p className="text-sm font-medium text-gray-500">{label}</p>
-      <p className="text-base font-semibold">{formatDateTime(time)}</p>
+      <p className="text-base font-semibold">{formatUTCToLocalDisplay(time)}</p>
     </div>
   </div>
 );

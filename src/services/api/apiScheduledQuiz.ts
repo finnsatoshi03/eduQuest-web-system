@@ -96,6 +96,72 @@ export async function getQuizById(classCode: string) {
   return quizData;
 }
 
+/**
+ * Ensures a scheduled quiz has a valid session_id before students can join
+ * Creates a new session if quiz is within time window and doesn't have one
+ */
+export async function ensureScheduledQuizSession(
+  classCode: string,
+): Promise<string> {
+  const { data: quizData, error: quizError } = await supabase
+    .from("quiz")
+    .select("quiz_id, current_session_id, open_time, close_time, status")
+    .eq("class_code", classCode)
+    .single();
+
+  if (quizError || !quizData) {
+    throw new Error("Quiz not found");
+  }
+
+  // Validate quiz is within the scheduled time window
+  if (quizData.open_time && quizData.close_time) {
+    const now = new Date();
+    const openTime = new Date(quizData.open_time);
+    const closeTime = new Date(quizData.close_time);
+
+    if (now < openTime) {
+      throw new Error(
+        `This quiz has not opened yet. It will be available starting ${openTime.toLocaleString()}.`,
+      );
+    }
+
+    if (now > closeTime) {
+      throw new Error(
+        `This quiz has ended. It closed at ${closeTime.toLocaleString()}.`,
+      );
+    }
+  }
+
+  // If session already exists, return it
+  if (quizData.current_session_id) {
+    return quizData.current_session_id;
+  }
+
+  // Create a new session for this scheduled quiz
+  const newSessionId = crypto.randomUUID();
+
+  const { error: updateError } = await supabase
+    .from("quiz")
+    .update({
+      current_session_id: newSessionId,
+      status: "in game", // Set status to in game when session is created
+    })
+    .eq("class_code", classCode);
+
+  if (updateError) {
+    throw new Error("Failed to create quiz session");
+  }
+
+  console.log(
+    "Created new session for scheduled quiz:",
+    classCode,
+    "Session:",
+    newSessionId,
+  );
+
+  return newSessionId;
+}
+
 export async function getQuizStudent(
   classCode: string,
   studentId: string,
@@ -105,7 +171,7 @@ export async function getQuizStudent(
     .select("*")
     .eq("class_code", classCode)
     .eq("quiz_student_id", studentId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error fetching quiz student data:", error);
@@ -120,6 +186,11 @@ export async function insertQuizStudent(
   classCode: string,
   name?: string,
 ) {
+  // Ensure session exists and quiz is within time window
+  // This will throw an error if quiz is not open or create a session if needed
+  const sessionId = await ensureScheduledQuizSession(classCode);
+
+  // Insert student with valid session_id
   const { data, error } = await supabase
     .from("quiz_students")
     .insert([
@@ -130,6 +201,7 @@ export async function insertQuizStudent(
         student_email: user.email,
         student_avatar: user.avatar,
         quiz_taken: false,
+        session_id: sessionId,
       },
     ])
     .select()
@@ -154,13 +226,10 @@ export async function checkQuizStatus(
   }
 
   // Check if student exists in quiz_students
-  let quizStudent = await getQuizStudent(classCode, user.id);
+  const quizStudent = await getQuizStudent(classCode, user.id);
 
-  // If student doesn't exist, insert them
-  if (!quizStudent) {
-    quizStudent = await insertQuizStudent(user, classCode, name);
-  }
-
+  // Don't insert students here - only check their status
+  // Students will be inserted when they actually start the quiz
   return {
     hasTaken: quizStudent?.quiz_taken || false,
     canRetake: quizData.retake || false,
@@ -194,7 +263,7 @@ export async function submitScheduledAnswer(
         quiz_student_id: studentId,
         class_code: classCode,
       })
-      .single();
+      .maybeSingle();
 
     // Store the individual answer in quiz_student_answers table
     // Include student_name, student_email, and class_code for permanent storage

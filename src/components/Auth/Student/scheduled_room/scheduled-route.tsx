@@ -8,8 +8,11 @@ import { useAuth } from "@/contexts/AuthProvider";
 import {
   checkQuizStatus,
   getQuizStudent,
+  insertQuizStudent,
 } from "@/services/api/apiScheduledQuiz";
 import GameForm from "../quiz_room/game-form";
+import { formatUTCToLocalDisplay } from "@/lib/helpers";
+import toast from "react-hot-toast";
 
 interface QuizData {
   title: string;
@@ -47,11 +50,53 @@ const ScheduledQuizInfo: React.FC<{
   quizData: QuizData;
   quizStatus: QuizStatus;
   onStartQuiz: () => void;
-}> = ({ quizData, quizStatus, onStartQuiz }) => {
+  isStarting?: boolean;
+}> = ({ quizData, quizStatus, onStartQuiz, isStarting = false }) => {
+  const [timeUntilOpen, setTimeUntilOpen] = React.useState<number>(0);
+  const [countdown, setCountdown] = React.useState<string>("");
+
   const now = new Date();
   const openDate = new Date(quizData.openTime);
   const closeDate = new Date(quizData.closeTime);
   const isQuizOpen = now >= openDate && now <= closeDate;
+
+  // Countdown timer effect
+  React.useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const openTime = new Date(quizData.openTime);
+      const diff = openTime.getTime() - now.getTime();
+
+      if (diff > 0) {
+        setTimeUntilOpen(diff);
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor(
+          (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+        );
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        if (days > 0) {
+          setCountdown(`${days}d ${hours}h ${minutes}m`);
+        } else if (hours > 0) {
+          setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+        } else if (minutes > 0) {
+          setCountdown(`${minutes}m ${seconds}s`);
+        } else {
+          setCountdown(`${seconds}s`);
+        }
+      } else {
+        setTimeUntilOpen(0);
+        setCountdown("");
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [quizData.openTime]);
 
   if (quizStatus.isLoading) {
     return <div className="text-center">Checking quiz status...</div>;
@@ -67,16 +112,42 @@ const ScheduledQuizInfo: React.FC<{
     );
   }
 
+  // Determine quiz status badge
+  const getStatusBadge = () => {
+    if (isQuizOpen) {
+      return (
+        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+          Active
+        </span>
+      );
+    } else if (now < openDate) {
+      return (
+        <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+          Scheduled
+        </span>
+      );
+    } else {
+      return (
+        <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+          Ended
+        </span>
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center space-y-6 text-center">
       <Calendar className="h-8 w-8 text-indigo-500" />
-      <h1 className="text-3xl font-bold text-indigo-500">{quizData.title}</h1>
+      <div className="flex flex-col items-center gap-2">
+        <h1 className="text-3xl font-bold text-indigo-500">{quizData.title}</h1>
+        {getStatusBadge()}
+      </div>
       <div className="space-y-2">
         <p className="text-gray-600">
-          Opens: {new Date(quizData.openTime).toLocaleString()}
+          Opens: {formatUTCToLocalDisplay(quizData.openTime)}
         </p>
         <p className="text-gray-600">
-          Closes: {new Date(quizData.closeTime).toLocaleString()}
+          Closes: {formatUTCToLocalDisplay(quizData.closeTime)}
         </p>
       </div>
       {isQuizOpen ? (
@@ -86,14 +157,34 @@ const ScheduledQuizInfo: React.FC<{
               You have already taken this quiz, but retakes are allowed.
             </p>
           )}
-          <Button onClick={onStartQuiz} className="mt-4">
-            {quizStatus.hasTaken ? "Retake Quiz" : "Start Quiz"}
+          <Button onClick={onStartQuiz} className="mt-4" disabled={isStarting}>
+            {isStarting
+              ? "Starting..."
+              : quizStatus.hasTaken
+                ? "Retake Quiz"
+                : "Start Quiz"}
           </Button>
         </div>
       ) : now < openDate ? (
-        <QuizStatusMessage status="Quiz has not opened yet" />
+        <div className="flex flex-col gap-4">
+          {countdown && (
+            <div className="rounded-lg bg-indigo-50 p-6 dark:bg-indigo-900/20">
+              <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                Quiz opens in:
+              </p>
+              <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                {countdown}
+              </p>
+            </div>
+          )}
+          <QuizStatusMessage
+            status={`This quiz will be available starting ${formatUTCToLocalDisplay(quizData.openTime)}.`}
+          />
+        </div>
       ) : (
-        <QuizStatusMessage status="Quiz has closed" />
+        <QuizStatusMessage
+          status={`This quiz has ended. It closed at ${formatUTCToLocalDisplay(quizData.closeTime)}.`}
+        />
       )}
     </div>
   );
@@ -104,6 +195,7 @@ const ScheduledQuizRoute: React.FC = () => {
   const [displayNameRequired, setDisplayNameRequired] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isStartingQuiz, setIsStartingQuiz] = useState(false);
   const [quizStatus, setQuizStatus] = useState<QuizStatus>({
     isLoading: true,
     hasTaken: false,
@@ -214,9 +306,32 @@ const ScheduledQuizRoute: React.FC = () => {
     );
   }
 
-  const handleStartQuiz = () => {
-    setShowQuiz(true);
-    setGameStarted(true);
+  const handleStartQuiz = async () => {
+    if (!user || !classId || isStartingQuiz) return;
+
+    setIsStartingQuiz(true);
+    try {
+      // Check if student already exists in quiz_students
+      const existingStudent = await getQuizStudent(classId, user.id);
+
+      // If student doesn't exist, insert them (this will ensure session exists and validate time window)
+      if (!existingStudent) {
+        await insertQuizStudent(user, classId, displayName || user.name);
+        console.log("Student successfully enrolled in scheduled quiz");
+      }
+
+      // Start the quiz
+      setShowQuiz(true);
+      setGameStarted(true);
+    } catch (error) {
+      console.error("Error starting quiz:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to start quiz. Please try again.";
+      toast.error(errorMessage);
+      setIsStartingQuiz(false);
+    }
   };
 
   const handleComplete = () => {
@@ -240,6 +355,7 @@ const ScheduledQuizRoute: React.FC = () => {
         quizData={quizData}
         quizStatus={quizStatus}
         onStartQuiz={handleStartQuiz}
+        isStarting={isStartingQuiz}
       />
     </div>
   );

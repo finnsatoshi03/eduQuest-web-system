@@ -38,7 +38,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { transformSubjectData } from "@/lib/helpers";
+import {
+  transformSubjectData,
+  convertLocalToUTC,
+  convertUTCToLocal,
+  isOvernightSchedule,
+} from "@/lib/helpers";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateQuizSettings } from "@/services/api/apiQuiz";
 import toast from "react-hot-toast";
@@ -73,6 +78,7 @@ const formSchema = z
     (data) => {
       if (data.is_scheduled) {
         const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const openTime = new Date(data.open_time || "");
         const closeTime = new Date(data.close_time || "");
 
@@ -80,7 +86,8 @@ const formSchema = z
           return false;
         }
 
-        if (openTime < now) {
+        // Only invalidate if the open date is before today (ignoring time)
+        if (openTime < today) {
           return false;
         }
 
@@ -94,7 +101,7 @@ const formSchema = z
     },
     {
       message:
-        "When scheduled, open time must be in the future and before close time",
+        "When scheduled, open time cannot be in the past and close time must be after open time",
       path: ["close_time"],
     },
   );
@@ -116,7 +123,10 @@ export default function QuizSettingsForm({
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(
     quiz?.cover_image || null,
   );
-  const [isScheduled, setIsScheduled] = useState(false);
+  const [isScheduled, setIsScheduled] = useState(
+    !!(quiz?.open_time && quiz?.close_time),
+  );
+  const [showOvernightWarning, setShowOvernightWarning] = useState(false);
 
   const { mutate: mutateUpdateQuiz, isPending } = useMutation({
     mutationFn: (data: any) => updateQuizSettings(data),
@@ -139,12 +149,12 @@ export default function QuizSettingsForm({
       description: quiz?.description || "",
       subject: quiz?.subject as Subject,
       cover_image: undefined,
-      is_scheduled: false,
-      open_time: "",
-      close_time: "",
-      shuffle_questions: false,
-      allow_retake: false,
-      no_time_limit: false,
+      is_scheduled: !!(quiz?.open_time && quiz?.close_time),
+      open_time: quiz?.open_time ? convertUTCToLocal(quiz.open_time) : "",
+      close_time: quiz?.close_time ? convertUTCToLocal(quiz.close_time) : "",
+      shuffle_questions: quiz?.shuffle || false,
+      allow_retake: quiz?.retake || false,
+      no_time_limit: quiz?.no_time || false,
     },
   });
 
@@ -186,6 +196,24 @@ export default function QuizSettingsForm({
     }
   }, [formErrors, form]);
 
+  // Check for overnight schedules
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (
+        (name === "open_time" || name === "close_time") &&
+        value.open_time &&
+        value.close_time
+      ) {
+        const isOvernight = isOvernightSchedule(
+          value.open_time,
+          value.close_time,
+        );
+        setShowOvernightWarning(isOvernight);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
   function onSubmit(values: z.infer<typeof formSchema>) {
     const {
       is_scheduled,
@@ -196,18 +224,21 @@ export default function QuizSettingsForm({
       no_time_limit,
       ...restValues
     } = values;
+
+    // Convert local times to UTC before sending to API
+    const openTimeUTC = open_time ? convertLocalToUTC(open_time) : null;
+    const closeTimeUTC = close_time ? convertLocalToUTC(close_time) : null;
+
     const submittedValues = {
       quizId: quiz.quiz_id,
       ...restValues,
-      open_time: open_time || null,
-      close_time: close_time || null,
+      open_time: openTimeUTC,
+      close_time: closeTimeUTC,
       retake: allow_retake,
       shuffle: shuffle_questions,
       no_time: no_time_limit,
     };
 
-    // Clear form errors when submitting
-    // console.log(submittedValues);
     setFormErrors([]);
     mutateUpdateQuiz(submittedValues);
   }
@@ -362,7 +393,11 @@ export default function QuizSettingsForm({
                         <Input
                           type="datetime-local"
                           {...field}
-                          min={new Date().toISOString().slice(0, 16)}
+                          min={
+                            new Date(new Date().setHours(0, 0, 0, 0))
+                              .toISOString()
+                              .slice(0, 16)
+                          }
                           disabled={isPending}
                         />
                       </FormControl>
@@ -382,12 +417,20 @@ export default function QuizSettingsForm({
                           {...field}
                           min={
                             form.getValues("open_time") ||
-                            new Date().toISOString().slice(0, 16)
+                            new Date(new Date().setHours(0, 0, 0, 0))
+                              .toISOString()
+                              .slice(0, 16)
                           }
                           disabled={isPending}
                         />
                       </FormControl>
                       <FormMessage />
+                      {showOvernightWarning && (
+                        <p className="text-sm text-amber-600">
+                          Notice: This quiz spans across multiple days (overnight
+                          schedule).
+                        </p>
+                      )}
                     </FormItem>
                   )}
                 />

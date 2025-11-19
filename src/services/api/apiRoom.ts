@@ -196,7 +196,22 @@ export async function joinRoom(
 
     const quizData = data as Quiz;
 
+    // Handle scheduled quizzes with time validation
     if (quizData && quizData.status === QUIZ_STATUS.SCHEDULED) {
+      const now = new Date();
+      const openTime = quizData.open_time ? new Date(quizData.open_time) : null;
+      const closeTime = quizData.close_time ? new Date(quizData.close_time) : null;
+
+      let errorMessage = "This quiz is scheduled and not yet available.";
+
+      if (openTime && closeTime) {
+        if (now < openTime) {
+          errorMessage = `This quiz has not opened yet. It will be available starting ${openTime.toLocaleString()}.`;
+        } else if (now > closeTime) {
+          errorMessage = `This quiz has ended. It closed at ${closeTime.toLocaleString()}.`;
+        }
+      }
+
       return {
         quiz_id: quizData.quiz_id,
         success: false,
@@ -204,6 +219,7 @@ export async function joinRoom(
         open_time: quizData.open_time,
         close_time: quizData.close_time,
         title: quizData.title,
+        error: errorMessage,
       };
     }
 
@@ -222,7 +238,7 @@ export async function joinRoom(
         quiz_student_id: studentId,
         class_code: classCode,
       })
-      .single();
+      .maybeSingle();
 
     if (existingRecord) {
       console.log("Record already exists:", existingRecord);
@@ -823,9 +839,9 @@ export async function updateLeaderBoard(
         quiz_student_id: studentId,
         class_code: classCode,
       })
-      .single();
+      .maybeSingle();
 
-    if (fetchError && fetchError.code !== "PGRST116") {
+    if (fetchError) {
       throw fetchError;
     }
 
@@ -923,7 +939,7 @@ export async function submitAnswer(
         quiz_student_id: studentId,
         class_code: classCode,
       })
-      .single();
+      .maybeSingle();
 
     if (fetchError) {
       console.error("❌ Error fetching quiz student:", fetchError);
