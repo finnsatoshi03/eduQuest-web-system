@@ -36,6 +36,7 @@ import { Quiz, User } from "@/lib/types";
 import toast from "react-hot-toast";
 import { useProfessorOverallStats } from "@/hooks/useProfessorAnalytics";
 import OverallStatsCards from "./Dashboard/OverallStatsCards";
+import { QUIZ_STATUS, QuizStatus } from "@/lib/constants/quizStatus";
 
 interface QuizCardProps {
   quiz: Quiz;
@@ -58,7 +59,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
       status,
     }: {
       quizId: string;
-      status: "draft" | "active" | "scheduled" | "archived" | "in lobby";
+      status: QuizStatus;
     }) => updateQuizStatus(quizId, status),
     onError: (error) => {
       toast.error(`Failed to update quiz status: ${error.message}`);
@@ -80,7 +81,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
 
   const handleStartGame = () => {
     nav(`professor/class/${quiz.class_code}/gamelobby`);
-    mutateQuizStatus({ quizId: quiz.quiz_id, status: "in lobby" });
+    mutateQuizStatus({ quizId: quiz.quiz_id, status: QUIZ_STATUS.IN_LOBBY });
   };
 
   const handleResponses = () =>
@@ -91,7 +92,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
   };
 
   const getQuizTimeStatus = () => {
-    if (!quiz.open_time || quiz.status !== "scheduled") return null;
+    if (!quiz.open_time || quiz.status !== QUIZ_STATUS.SCHEDULED) return null;
 
     const startTime = new Date(quiz.open_time);
     const endTime = quiz.close_time ? new Date(quiz.close_time) : null;
@@ -109,7 +110,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
   };
 
   const getRemainingTime = () => {
-    if (!quiz.close_time || quiz.status !== "scheduled") return null;
+    if (!quiz.close_time || quiz.status !== QUIZ_STATUS.SCHEDULED) return null;
 
     const endTime = new Date(quiz.close_time);
     const currentTime = new Date();
@@ -157,13 +158,15 @@ const QuizCard: React.FC<QuizCardProps> = ({
         <div className="space-y-1">
           <p
             className={`w-fit rounded-full px-2 text-[0.6rem] font-semibold uppercase ${
-              quiz.status === "draft"
+              quiz.status === QUIZ_STATUS.DRAFT
                 ? "bg-red-300 text-red-700"
-                : quiz.status === "scheduled" && timeStatus === "closed"
+                : quiz.status === QUIZ_STATUS.SCHEDULED && timeStatus === "closed"
                   ? "bg-gray-300 text-gray-700"
-                  : quiz.status === "scheduled"
+                  : quiz.status === QUIZ_STATUS.SCHEDULED
                     ? "bg-yellow-300 text-yellow-700"
-                    : "bg-green-300 text-green-700"
+                    : quiz.status === QUIZ_STATUS.IN_GAME
+                      ? "bg-blue-300 text-blue-700"
+                      : "bg-green-300 text-green-700"
             }`}
           >
             {timeStatus === "closed" ? "Closed" : quiz.status}
@@ -179,7 +182,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
               )}
             </p>
           </div>
-          {quiz.status === "scheduled" && quiz.open_time && (
+          {quiz.status === QUIZ_STATUS.SCHEDULED && quiz.open_time && (
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2 text-xs">
                 <Calendar className="size-4" />
@@ -247,7 +250,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
           </PopoverContent>
         </Popover>
         <div className="flex flex-col items-end gap-1">
-          {quiz.status === "active" && (
+          {quiz.status === QUIZ_STATUS.ACTIVE && (
             <>
               <Button
                 variant="outline"
@@ -272,7 +275,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
               </Button>
             </>
           )}
-          {quiz.status === "scheduled" && (
+          {quiz.status === QUIZ_STATUS.SCHEDULED && (
             <>
               {timeStatus === "upcoming" ? (
                 <Button
@@ -294,7 +297,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
               )}
             </>
           )}
-          {quiz.status === "in lobby" && (
+          {quiz.status === QUIZ_STATUS.IN_LOBBY && (
             <Button
               className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
               onClick={handleGoLobby}
@@ -303,7 +306,16 @@ const QuizCard: React.FC<QuizCardProps> = ({
               Go to Lobby
             </Button>
           )}
-          {quiz.status === "draft" ? (
+          {quiz.status === QUIZ_STATUS.IN_GAME && (
+            <Button
+              className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+              onClick={handleGoLobby}
+            >
+              <Play size={14} />
+              Rejoin Game
+            </Button>
+          )}
+          {quiz.status === QUIZ_STATUS.DRAFT ? (
             <Button className="w-fit" onClick={() => onEdit(quiz.quiz_id)}>
               Continue editing
             </Button>
@@ -337,13 +349,13 @@ export default function ProfessorDashboard() {
   const safeQuizzes: Quiz[] = Array.isArray(quizzes) ? quizzes : [quizzes];
 
   // Filter quizzes by status
-  const activeQuizzes = safeQuizzes.filter((quiz) => quiz.status === "active");
+  const activeQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.ACTIVE);
   const scheduledQuizzes = safeQuizzes.filter(
-    (quiz) => quiz.status === "scheduled",
+    (quiz) => quiz.status === QUIZ_STATUS.SCHEDULED,
   );
-  const draftQuizzes = safeQuizzes.filter((quiz) => quiz.status === "draft");
+  const draftQuizzes = safeQuizzes.filter((quiz) => quiz.status === QUIZ_STATUS.DRAFT);
   const inLobbyQuizzes = safeQuizzes.filter(
-    (quiz) => quiz.status === "in lobby",
+    (quiz) => quiz.status === QUIZ_STATUS.IN_LOBBY || quiz.status === QUIZ_STATUS.IN_GAME,
   );
 
   const { mutate: createNewQuiz, isPending: isCreatingQuiz } = useMutation({

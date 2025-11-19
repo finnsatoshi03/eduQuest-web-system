@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { qgen } from "./apiUrl";
 import axios from "axios";
 import { Quiz, QuizQuestions } from "@/lib/types";
+import { QUIZ_STATUS, QuizStatus } from "@/lib/constants/quizStatus";
 
 export async function createQuiz(ownerId: string): Promise<Quiz | null> {
   const newQuizId = uuidv4();
@@ -14,7 +15,7 @@ export async function createQuiz(ownerId: string): Promise<Quiz | null> {
       title: "Untitled Quiz",
       quiz_id: newQuizId,
       owner_id: ownerId,
-      status: "draft",
+      status: QUIZ_STATUS.DRAFT,
     })
     .select()
     .single();
@@ -425,9 +426,9 @@ export async function updateQuizAndQuestions(
     const total_points = questions.reduce((sum, q) => sum + (q.points || 0), 0);
 
     // Determine quiz status based on open_time and close_time
-    let status = "active";
+    let status = QUIZ_STATUS.ACTIVE;
     if (quizData.open_time && quizData.close_time) {
-      status = "scheduled";
+      status = QUIZ_STATUS.SCHEDULED;
     }
 
     // Prepare the quiz update object
@@ -550,7 +551,7 @@ export async function updateQuizAndQuestions(
 
 export async function updateQuizStatus(
   quizId: string,
-  status: "draft" | "active" | "scheduled" | "archived" | "in lobby",
+  status: QuizStatus,
 ): Promise<Quiz | null> {
   const { data, error } = await supabase
     .from("quiz")

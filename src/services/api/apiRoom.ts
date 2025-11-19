@@ -8,6 +8,7 @@ import {
 } from "@/lib/types";
 import { Dispatch, SetStateAction } from "react";
 import supabase from "../supabase";
+import { QUIZ_STATUS } from "@/lib/constants/quizStatus";
 
 // Function to start the game and notify all subscribers
 export async function startGame(
@@ -32,7 +33,7 @@ export async function startGame(
       .eq("class_code", classCode)
       .single();
 
-    if (statusData?.status === "in game") {
+    if (statusData?.status === QUIZ_STATUS.IN_GAME) {
       throw new Error("Game is already in progress");
     }
 
@@ -43,7 +44,7 @@ export async function startGame(
     await supabase
       .from("quiz")
       .update({
-        status: "in game",
+        status: QUIZ_STATUS.IN_GAME,
         current_session_id: sessionId
       })
       .eq("class_code", classCode);
@@ -69,7 +70,7 @@ export async function reconnectGame(classCode: string): Promise<boolean> {
       .select("status")
       .eq("class_code", classCode)
       .single();
-    return data?.status === "in game";
+    return data?.status === QUIZ_STATUS.IN_GAME;
   } catch (error) {
     console.error("Error checking quiz status:", error);
     return false;
@@ -81,7 +82,7 @@ export async function endGame(classCode: string): Promise<boolean> {
     // Update the quiz status to "active"
     await supabase
       .from("quiz")
-      .update({ status: "active" })
+      .update({ status: QUIZ_STATUS.ACTIVE })
       .eq("class_code", classCode)
       .select();
 
@@ -195,18 +196,18 @@ export async function joinRoom(
 
     const quizData = data as Quiz;
 
-    if (quizData && quizData.status === "scheduled") {
+    if (quizData && quizData.status === QUIZ_STATUS.SCHEDULED) {
       return {
         quiz_id: quizData.quiz_id,
         success: false,
-        status: "scheduled",
+        status: QUIZ_STATUS.SCHEDULED,
         open_time: quizData.open_time,
         close_time: quizData.close_time,
         title: quizData.title,
       };
     }
 
-    if (quizData && quizData.status !== "in lobby") {
+    if (quizData && quizData.status !== QUIZ_STATUS.IN_LOBBY) {
       return {
         success: false,
         error:
@@ -227,7 +228,7 @@ export async function joinRoom(
       console.log("Record already exists:", existingRecord);
       return {
         success: true,
-        status: "in lobby",
+        status: QUIZ_STATUS.IN_LOBBY,
       };
     }
 
@@ -246,7 +247,7 @@ export async function joinRoom(
 
     return {
       success: true,
-      status: "in lobby",
+      status: QUIZ_STATUS.IN_LOBBY,
     };
   } catch (error) {
     console.error("Error joining room:", error);
