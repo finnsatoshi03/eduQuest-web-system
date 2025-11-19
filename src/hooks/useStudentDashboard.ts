@@ -25,6 +25,7 @@ export function useStudentDashboard(studentId: string | undefined) {
     queryFn: () => getStudentQuizHistory(studentId!),
     enabled: !!studentId,
     staleTime: 1000 * 60 * 5, // 5 minutes (but realtime will update sooner)
+    refetchOnWindowFocus: false,
   });
 
   // Query for performance stats
@@ -33,6 +34,7 @@ export function useStudentDashboard(studentId: string | undefined) {
     queryFn: () => getStudentPerformanceStats(studentId!),
     enabled: !!studentId,
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 
   // Query for subject performance
@@ -41,6 +43,7 @@ export function useStudentDashboard(studentId: string | undefined) {
     queryFn: () => getStudentPerformanceBySubject(studentId!),
     enabled: !!studentId,
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 
   // Set up realtime subscription to quiz_history table
@@ -72,6 +75,9 @@ export function useStudentDashboard(studentId: string | undefined) {
           queryClient.invalidateQueries({
             queryKey: ["studentSubjectPerformance", studentId],
           });
+          queryClient.invalidateQueries({
+            queryKey: ["filteredQuizHistory", studentId],
+          });
 
           // Show a notification or update UI
           console.log("✅ Student dashboard data refreshed automatically");
@@ -94,6 +100,12 @@ export function useStudentDashboard(studentId: string | undefined) {
           });
           queryClient.invalidateQueries({
             queryKey: ["studentPerformanceStats", studentId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["studentSubjectPerformance", studentId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["filteredQuizHistory", studentId],
           });
         },
       )
@@ -127,16 +139,36 @@ export function useStudentDashboard(studentId: string | undefined) {
     isError:
       historyQuery.isError || statsQuery.isError || subjectsQuery.isError,
     error: historyQuery.error || statsQuery.error || subjectsQuery.error,
-    refetch: () => {
-      historyQuery.refetch();
-      statsQuery.refetch();
-      subjectsQuery.refetch();
+    refetch: async () => {
+      // Invalidate all related queries to ensure fresh data
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["studentQuizHistory", studentId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["studentPerformanceStats", studentId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["studentSubjectPerformance", studentId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["filteredQuizHistory", studentId],
+        }),
+      ]);
+
+      // Refetch all queries
+      return Promise.all([
+        historyQuery.refetch(),
+        statsQuery.refetch(),
+        subjectsQuery.refetch(),
+      ]);
     },
   };
 }
 
 /**
  * Custom hook for filtered quiz history
+ * Now properly reacts to changes in the base history data
  */
 export function useFilteredQuizHistory(
   studentId: string | undefined,
@@ -145,7 +177,13 @@ export function useFilteredQuizHistory(
   allHistory: StudentQuizHistory[],
 ) {
   return useQuery({
-    queryKey: ["filteredQuizHistory", studentId, timeFilter, subjectFilter],
+    queryKey: [
+      "filteredQuizHistory",
+      studentId,
+      timeFilter,
+      subjectFilter,
+      allHistory.length, // Include history length to trigger refetch when data changes
+    ],
     queryFn: async () => {
       let filtered = [...allHistory];
 
@@ -161,7 +199,8 @@ export function useFilteredQuizHistory(
 
       return filtered;
     },
-    enabled: !!studentId && allHistory.length > 0,
+    enabled: !!studentId,
     staleTime: 1000 * 60 * 2, // 2 minutes
+    refetchOnWindowFocus: false,
   });
 }
