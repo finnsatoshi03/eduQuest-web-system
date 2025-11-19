@@ -1,4 +1,4 @@
-import { QuizQuestions, User } from "@/lib/types";
+import { QuizQuestions, User, LeaderboardEntry } from "@/lib/types";
 import supabase from "../supabase";
 import { QUIZ_STATUS } from "@/lib/constants/quizStatus";
 
@@ -511,13 +511,27 @@ export async function checkQuizStatus(
     throw new Error("Quiz not found");
   }
 
-  // Check if student exists in quiz_students
+  // CRITICAL: Check both quiz_students and quiz_history for retake prevention
+  // This prevents retakes even if quiz_students record was deleted during finalization
   const quizStudent = await getQuizStudent(classCode, user.id);
+
+  // Check quiz_history for completed attempts
+  const { data: historyRecord } = await supabase
+    .from("quiz_history")
+    .select("quiz_taken")
+    .eq("class_code", classCode)
+    .eq("quiz_student_id", user.id)
+    .maybeSingle();
+
+  // Student has taken the quiz if:
+  // 1. They have a record in quiz_students with quiz_taken = true, OR
+  // 2. They have a record in quiz_history (which means they completed it)
+  const hasTaken = quizStudent?.quiz_taken === true || historyRecord !== null;
 
   // Don't insert students here - only check their status
   // Students will be inserted when they actually start the quiz
   return {
-    hasTaken: quizStudent?.quiz_taken || false,
+    hasTaken,
     canRetake: quizData.retake || false,
   };
 }
@@ -579,21 +593,58 @@ export async function submitScheduledAnswer(
 
     const isCorrect = questionData?.right_answer === answer;
 
-    // Get the quiz_students record for this student (includes id, name, email)
+    // CRITICAL: Get the quiz_students record for this student with session_id validation
+    // This ensures the student is registered for the current session
     const { data: quizStudent } = await supabase
       .from("quiz_students")
-      .select("id, student_name, student_email")
+      .select("id, student_name, student_email, session_id")
       .match({
         quiz_student_id: studentId,
         class_code: classCode,
+        session_id: quizData.current_session_id, // CRITICAL: Match by session_id
       })
       .maybeSingle();
 
-    // Ensure student is registered for this quiz
+    // Ensure student is registered for this quiz session
     if (!quizStudent) {
+      // Check if student exists but with different session_id (retake scenario)
+      const { data: otherSessionStudent } = await supabase
+        .from("quiz_students")
+        .select("session_id")
+        .match({
+          quiz_student_id: studentId,
+          class_code: classCode,
+        })
+        .maybeSingle();
+
+      if (otherSessionStudent) {
+        throw new Error(
+          "Student is registered for a different quiz session. Please refresh and rejoin the quiz.",
+        );
+      }
+
+      // Check if student has already completed this quiz (in quiz_history)
+      const { data: historyRecord } = await supabase
+        .from("quiz_history")
+        .select("quiz_student_id")
+        .eq("class_code", classCode)
+        .eq("quiz_student_id", studentId)
+        .maybeSingle();
+
+      if (historyRecord) {
+        throw new Error(
+          "You have already completed this quiz. Retakes are not allowed.",
+        );
+      }
+
       throw new Error(
-        "Student not registered for this quiz. Please join the quiz first.",
+        "Student not registered for this quiz session. Please join the quiz first.",
       );
+    }
+
+    // CRITICAL: Verify session_id matches (double-check)
+    if (quizStudent.session_id !== quizData.current_session_id) {
+      throw new Error("Session mismatch. Please refresh and rejoin the quiz.");
     }
 
     // Store the individual answer in quiz_student_answers table
@@ -647,6 +698,198 @@ export async function updateScheduledQuizScore(
     console.log("Scheduled quiz score updated successfully");
   } catch (error) {
     console.error("Error updating scheduled quiz score:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update leaderboard for scheduled quizzes
+ * CRITICAL: Ensures session_id exists before updating quiz_students
+ * This prevents NULL session_id constraint violations
+ */
+export async function updateScheduledQuizLeaderboard(
+  classCode: string,
+  studentId: string,
+  studentName: string,
+  studentAvatar: string,
+  studentEmail: string,
+  score: number,
+  rightAns: number,
+  wrongAns: number,
+): Promise<LeaderboardEntry[]> {
+  try {
+    // Get the current session_id from the quiz table
+    const { data: quizData, error: quizError } = await supabase
+      .from("quiz")
+      .select("current_session_id, status")
+      .eq("class_code", classCode)
+      .single();
+
+    if (quizError || !quizData) {
+      throw new Error("Quiz not found");
+    }
+
+    const sessionId = quizData?.current_session_id;
+
+    // CRITICAL: Enforce valid session before updating leaderboard
+    // This prevents NULL session_id records that cause sync issues
+    if (!sessionId) {
+      console.error(
+        "🚫 BLOCKED: No active session_id for scheduled quiz class_code:",
+        classCode,
+      );
+      throw new Error(
+        "Quiz session not started. Cannot update leaderboard. Please wait for the professor to start the quiz.",
+      );
+    }
+
+    // Verify quiz is in active status
+    const isScheduledQuizActive =
+      quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME && !!sessionId;
+    const isLiveQuizActive = quizData.status === QUIZ_STATUS.IN_GAME;
+
+    if (!isScheduledQuizActive && !isLiveQuizActive) {
+      throw new Error(
+        `Cannot update leaderboard. Quiz status is ${quizData.status}. The quiz is not currently active.`,
+      );
+    }
+
+    // Check if student exists in quiz_students
+    const { data: existingStudent, error: fetchError } = await supabase
+      .from("quiz_students")
+      .select("quiz_student_id, score, id")
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+        session_id: sessionId, // CRITICAL: Match by session_id to ensure correct session
+      })
+      .maybeSingle();
+
+    if (fetchError) {
+      throw fetchError;
+    }
+
+    if (!existingStudent) {
+      // CRITICAL: Insert student with valid session_id
+      // This ensures the student record is created before finalization
+      const { error: insertError } = await supabase
+        .from("quiz_students")
+        .insert([
+          {
+            quiz_student_id: studentId,
+            student_name: studentName,
+            student_avatar: studentAvatar,
+            student_email: studentEmail,
+            score: score,
+            class_code: classCode,
+            session_id: sessionId, // CRITICAL: Must have valid session_id
+            right_answer: rightAns,
+            wrong_answer: wrongAns,
+          },
+        ])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error(
+          "❌ Failed to insert student into quiz_students:",
+          insertError,
+        );
+        throw new Error(
+          `Failed to register student attempt: ${insertError.message}`,
+        );
+      }
+
+      console.log(
+        "✅ New student added to scheduled quiz:",
+        studentId,
+        "Session:",
+        sessionId,
+      );
+    } else {
+      // Update existing student record
+      const { error: updateError } = await supabase
+        .from("quiz_students")
+        .update({
+          score: score,
+          right_answer: rightAns,
+          wrong_answer: wrongAns,
+          session_id: sessionId, // Ensure session_id is set
+        })
+        .match({
+          quiz_student_id: studentId,
+          class_code: classCode,
+          session_id: sessionId, // Match by session_id
+        });
+
+      if (updateError) {
+        console.error("❌ Failed to update student score:", updateError);
+        throw updateError;
+      }
+
+      console.log(
+        "✅ Student score updated:",
+        studentId,
+        "Session:",
+        sessionId,
+      );
+    }
+
+    // Get all students for leaderboard ranking
+    const { data: allStudents, error: leaderboardError } = await supabase
+      .from("quiz_students")
+      .select(
+        "quiz_student_id, score, id, right_answer, wrong_answer, student_name, student_avatar, student_email",
+      )
+      .eq("class_code", classCode)
+      .eq("session_id", sessionId) // CRITICAL: Only get students from this session
+      .order("score", { ascending: false });
+
+    if (leaderboardError) {
+      throw leaderboardError;
+    }
+
+    if (allStudents && allStudents.length > 0) {
+      // Update placements
+      // CRITICAL: Must include session_id in updates to prevent NULL constraint violation
+      const updates = allStudents.map((student, index) => ({
+        id: student.id,
+        quiz_student_id: student.quiz_student_id,
+        placement: index + 1,
+        session_id: sessionId, // CRITICAL: Preserve session_id in update
+      }));
+
+      // Use update instead of upsert to avoid constraint issues
+      // Update each student's placement individually to ensure session_id is preserved
+      const updatePromises = updates.map((update) =>
+        supabase
+          .from("quiz_students")
+          .update({
+            placement: update.placement,
+            session_id: update.session_id, // Ensure session_id is set
+          })
+          .match({
+            id: update.id,
+            quiz_student_id: update.quiz_student_id,
+            session_id: sessionId, // Match by session_id to ensure correct record
+          }),
+      );
+
+      const results = await Promise.all(updatePromises);
+      const errors = results.filter((result) => result.error);
+
+      if (errors.length > 0) {
+        console.error("⚠️ Failed to update some placements:", errors);
+        // Don't throw - leaderboard data is still valid
+      }
+
+      console.log("✅ Scheduled quiz leaderboard updated successfully");
+      return allStudents;
+    }
+
+    return [];
+  } catch (error) {
+    console.error("❌ Error updating scheduled quiz leaderboard:", error);
     throw error;
   }
 }
@@ -839,7 +1082,8 @@ export async function finalizeStudentAttempt(
   studentId: string,
 ): Promise<boolean> {
   try {
-    console.log("📝 Finalizing attempt for student:", studentId);
+    console.log("🔄 Finalizing student attempt for scheduled quiz...");
+    console.log("📝 Student ID:", studentId, "Class Code:", classCode);
 
     // Get quiz and student data
     const { data: quizData, error: quizError } = await supabase
@@ -855,32 +1099,76 @@ export async function finalizeStudentAttempt(
     const { quiz_id: quizId, current_session_id: sessionId } = quizData;
 
     if (!sessionId) {
-      throw new Error("No active session found");
+      throw new Error(
+        "No active session found. The quiz may not have been started properly.",
+      );
+    }
+
+    // CRITICAL: Check if student already exists in quiz_history (already finalized)
+    const { data: existingHistory } = await supabase
+      .from("quiz_history")
+      .select("quiz_student_id")
+      .eq("class_code", classCode)
+      .eq("quiz_student_id", studentId)
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    if (existingHistory) {
+      console.log(
+        "✅ Student already finalized - skipping duplicate finalization",
+      );
+      return true;
     }
 
     // Get student data from quiz_students
+    // CRITICAL: Must match by session_id to ensure we're finalizing the correct attempt
     const { data: studentData, error: studentError } = await supabase
       .from("quiz_students")
       .select("*")
       .match({
         quiz_student_id: studentId,
         class_code: classCode,
-        session_id: sessionId,
+        session_id: sessionId, // CRITICAL: Match by session_id
       })
       .maybeSingle();
 
     if (studentError) {
+      console.error("❌ Error fetching student data:", studentError);
       throw studentError;
     }
 
     if (!studentData) {
       console.warn(
-        "⚠️ Student not found in quiz_students - may already be finalized",
+        "⚠️ Student not found in quiz_students with session_id:",
+        sessionId,
       );
-      return true;
+      console.warn(
+        "This may indicate the student record was already deleted or never created.",
+      );
+
+      // Check if student exists in quiz_history (already finalized)
+      const { data: historyCheck } = await supabase
+        .from("quiz_history")
+        .select("quiz_student_id")
+        .eq("class_code", classCode)
+        .eq("quiz_student_id", studentId)
+        .maybeSingle();
+
+      if (historyCheck) {
+        console.log(
+          "✅ Student already finalized (found in quiz_history) - skipping",
+        );
+        return true;
+      }
+
+      // If no record exists in either table, this is an error
+      throw new Error(
+        "Student record not found. Cannot finalize attempt. Please ensure the student completed the quiz.",
+      );
     }
 
-    // Insert into quiz_history
+    // CRITICAL: Insert into quiz_history BEFORE deleting from quiz_students
+    // This ensures data is preserved even if deletion fails
     const { error: insertError } = await supabase.from("quiz_history").insert([
       {
         quiz_id: quizId,
@@ -894,7 +1182,7 @@ export async function finalizeStudentAttempt(
         wrong_answer: studentData.wrong_answer || 0,
         placement: studentData.placement || 0,
         quiz_taken: true,
-        session_id: sessionId,
+        session_id: sessionId, // CRITICAL: Preserve session_id in history
         completed_at: new Date().toISOString(),
       },
     ]);
@@ -902,18 +1190,37 @@ export async function finalizeStudentAttempt(
     if (insertError) {
       // Check if error is due to duplicate (already finalized)
       if (insertError.code === "23505") {
-        console.log("✅ Student already finalized - skipping");
+        console.log("✅ Student already finalized (duplicate key) - skipping");
         return true;
       }
-      throw insertError;
+      console.error("❌ Failed to insert into quiz_history:", insertError);
+      throw new Error(
+        `Failed to finalize student attempt: ${insertError.message}`,
+      );
     }
 
-    // Delete from quiz_students
-    await supabase.from("quiz_students").delete().match({
-      quiz_student_id: studentId,
-      class_code: classCode,
-      session_id: sessionId,
-    });
+    console.log("✅ Successfully inserted into quiz_history");
+
+    // Delete from quiz_students AFTER successful insert
+    // This ensures data is preserved even if deletion fails
+    const { error: deleteError } = await supabase
+      .from("quiz_students")
+      .delete()
+      .match({
+        quiz_student_id: studentId,
+        class_code: classCode,
+        session_id: sessionId, // CRITICAL: Match by session_id
+      });
+
+    if (deleteError) {
+      console.error("⚠️ Failed to delete from quiz_students:", deleteError);
+      // Don't throw - data is already in quiz_history, so finalization succeeded
+      console.warn(
+        "⚠️ Student data remains in quiz_students but is also in quiz_history",
+      );
+    } else {
+      console.log("✅ Successfully deleted from quiz_students");
+    }
 
     console.log("✅ Student attempt finalized successfully");
     return true;

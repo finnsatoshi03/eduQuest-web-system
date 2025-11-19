@@ -45,7 +45,7 @@ export async function startGame(
       .from("quiz")
       .update({
         status: QUIZ_STATUS.IN_GAME,
-        current_session_id: sessionId
+        current_session_id: sessionId,
       })
       .eq("class_code", classCode);
 
@@ -56,7 +56,9 @@ export async function startGame(
       payload: { classCode, sessionId },
     });
     channel.unsubscribe();
-    console.log(`Game started for quiz ID: ${classCode}, Session: ${sessionId}`);
+    console.log(
+      `Game started for quiz ID: ${classCode}, Session: ${sessionId}`,
+    );
   } catch (error) {
     console.error("Error starting game:", error);
     throw error;
@@ -197,10 +199,15 @@ export async function joinRoom(
     const quizData = data as Quiz;
 
     // Handle scheduled quizzes with time validation
-    if (quizData && quizData.status === QUIZ_STATUS.SCHEDULED) {
+    if (
+      (quizData && quizData.status === QUIZ_STATUS.SCHEDULED) ||
+      quizData.status === QUIZ_STATUS.SCHEDULED_IN_GAME
+    ) {
       const now = new Date();
       const openTime = quizData.open_time ? new Date(quizData.open_time) : null;
-      const closeTime = quizData.close_time ? new Date(quizData.close_time) : null;
+      const closeTime = quizData.close_time
+        ? new Date(quizData.close_time)
+        : null;
 
       let errorMessage = "This quiz is scheduled and not yet available.";
 
@@ -528,7 +535,7 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
             p_class_code: classCode,
             p_quiz_id: quizId,
             p_session_id: sessionId,
-          }
+          },
         );
 
         if (rpcError) {
@@ -537,12 +544,20 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
 
           // Check for specific error codes
           if (rpcError.code === "42501") {
-            console.error("🔒 RLS POLICY ERROR: Row Level Security blocking operation");
-            console.error("FIX: Run 002_fix_quiz_history_rls_policies.sql migration");
+            console.error(
+              "🔒 RLS POLICY ERROR: Row Level Security blocking operation",
+            );
+            console.error(
+              "FIX: Run 002_fix_quiz_history_rls_policies.sql migration",
+            );
             break; // Don't retry RLS errors
           } else if (rpcError.code === "42883") {
-            console.error("⚠️ RPC FUNCTION NOT FOUND: rpc_end_game_atomic doesn't exist");
-            console.error("FIX: Run 003_create_atomic_end_game_rpc.sql migration");
+            console.error(
+              "⚠️ RPC FUNCTION NOT FOUND: rpc_end_game_atomic doesn't exist",
+            );
+            console.error(
+              "FIX: Run 003_create_atomic_end_game_rpc.sql migration",
+            );
             break; // Don't retry missing function errors
           }
 
@@ -559,8 +574,12 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
 
           if (result && result.success) {
             console.log(`✅ Successfully finalized game!`);
-            console.log(`   - Inserted: ${result.inserted_count} records to quiz_history`);
-            console.log(`   - Deleted: ${result.deleted_count} records from quiz_students`);
+            console.log(
+              `   - Inserted: ${result.inserted_count} records to quiz_history`,
+            );
+            console.log(
+              `   - Deleted: ${result.deleted_count} records from quiz_students`,
+            );
             console.log(`   - Total students: ${result.total_students}`);
 
             if (result.warning) {
@@ -569,7 +588,10 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
 
             return true;
           } else {
-            console.error("❌ RPC returned failure:", result?.error || "Unknown error");
+            console.error(
+              "❌ RPC returned failure:",
+              result?.error || "Unknown error",
+            );
             lastError = result?.error;
             return false;
           }
@@ -589,7 +611,9 @@ export async function sendEndGame(classCode: string): Promise<boolean> {
     // If we get here, all retries failed
     console.error("❌ CRITICAL: All attempts to finalize game failed!");
     console.error("Last error:", lastError);
-    console.error("⚠️ DATA MAY BE IN INCONSISTENT STATE - Manual intervention may be required");
+    console.error(
+      "⚠️ DATA MAY BE IN INCONSISTENT STATE - Manual intervention may be required",
+    );
 
     return false;
   } catch (error) {
@@ -828,7 +852,10 @@ export async function updateLeaderBoard(
     // CRITICAL: Enforce valid session before updating leaderboard
     // This prevents NULL session_id records that cause sync issues
     if (!sessionId) {
-      console.error("🚫 BLOCKED: No active session_id for class_code:", classCode);
+      console.error(
+        "🚫 BLOCKED: No active session_id for class_code:",
+        classCode,
+      );
       throw new Error("Quiz session not started. Cannot update leaderboard.");
     }
 
@@ -926,9 +953,14 @@ export async function submitAnswer(
     // CRITICAL: Block answer submission if no valid session exists
     // This prevents NULL session_id records that cause sync issues
     if (!sessionId) {
-      console.error("🚫 BLOCKED: No active session_id for class_code:", classCode);
+      console.error(
+        "🚫 BLOCKED: No active session_id for class_code:",
+        classCode,
+      );
       console.error("Quiz must be started before accepting answers");
-      throw new Error("Quiz session not started. Please wait for the professor to start the game.");
+      throw new Error(
+        "Quiz session not started. Please wait for the professor to start the game.",
+      );
     }
 
     // Get the quiz_students record for this student (includes id, name, email)
@@ -946,7 +978,10 @@ export async function submitAnswer(
     }
 
     if (!quizStudent) {
-      console.error("❌ Quiz student record not found for:", { studentId, classCode });
+      console.error("❌ Quiz student record not found for:", {
+        studentId,
+        classCode,
+      });
     }
 
     // Store the individual answer in quiz_student_answers table
@@ -975,21 +1010,37 @@ export async function submitAnswer(
 
       // Check for specific error codes
       if (insertError.code === "42501") {
-        console.error("🔒 RLS POLICY ERROR: Row Level Security is blocking inserts");
-        console.error("FIX: Run migration_fix_rls_policies.sql in Supabase SQL Editor");
-        console.error("This will create permissive policies for authenticated users");
+        console.error(
+          "🔒 RLS POLICY ERROR: Row Level Security is blocking inserts",
+        );
+        console.error(
+          "FIX: Run migration_fix_rls_policies.sql in Supabase SQL Editor",
+        );
+        console.error(
+          "This will create permissive policies for authenticated users",
+        );
       } else if (insertError.code === "42703") {
-        console.error("📋 COLUMN ERROR: Missing column in quiz_student_answers table");
+        console.error(
+          "📋 COLUMN ERROR: Missing column in quiz_student_answers table",
+        );
         console.error("Error message:", insertError.message);
         if (insertError.message?.includes("class_code")) {
-          console.error("🔧 FIX: Run migration_add_class_code_to_answers.sql in Supabase SQL Editor");
+          console.error(
+            "🔧 FIX: Run migration_add_class_code_to_answers.sql in Supabase SQL Editor",
+          );
         } else if (insertError.message?.includes("session_id")) {
-          console.error("🔧 FIX: session_id column is missing - should have been added in migration");
+          console.error(
+            "🔧 FIX: session_id column is missing - should have been added in migration",
+          );
         } else {
-          console.error("🔧 FIX: Run migration_quiz_answers_student_info.sql in Supabase SQL Editor");
+          console.error(
+            "🔧 FIX: Run migration_quiz_answers_student_info.sql in Supabase SQL Editor",
+          );
         }
       } else {
-        console.error("⚠️ UNKNOWN ERROR - Check Supabase logs for more details");
+        console.error(
+          "⚠️ UNKNOWN ERROR - Check Supabase logs for more details",
+        );
       }
     } else {
       console.log("✅ Answer stored successfully - Session:", sessionId);

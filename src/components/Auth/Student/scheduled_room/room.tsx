@@ -3,7 +3,6 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { useTheme } from "@/contexts/ThemeProvider";
 import { useMediaQuery } from "react-responsive";
 import { QuizQuestions, LeaderboardEntry } from "@/lib/types";
-import { updateLeaderBoard } from "@/services/api/apiRoom";
 import { useQuizAnswer } from "@/hooks/useQuizAnswer";
 
 // Components
@@ -24,10 +23,12 @@ import {
   getQuestionsForScheduledQuiz,
   updateQuizTaken,
   finalizeStudentAttempt,
+  updateScheduledQuizLeaderboard,
 } from "@/services/api/apiScheduledQuiz";
 import { getQuizById } from "@/services/api/apiQuiz";
 import { shuffleArray } from "@/lib/helpers";
 import supabase from "@/services/supabase";
+import toast from "react-hot-toast";
 
 // Types
 type EffectType = "correct" | "wrong" | "noAnswer" | null;
@@ -134,7 +135,7 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
     };
 
     fetchQuizAndQuestions();
-  }, [classCode]);
+  }, [classCode, quizId]);
 
   // Subscribe to quiz status changes to detect finalization
   useEffect(() => {
@@ -151,14 +152,11 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
           filter: `class_code=eq.${classCode}`,
         },
         (payload) => {
-          const newStatus = (payload.new as any).status;
+          const newStatus = (payload.new as { status: string }).status;
           console.log("📊 Quiz status update received:", newStatus);
-          
+
           // If quiz is finalized, update pending status
-          if (
-            newStatus === "scheduled-completed" ||
-            newStatus === "active"
-          ) {
+          if (newStatus === "scheduled-completed" || newStatus === "active") {
             setIsResultsPending(false);
             // Optionally show a notification
             console.log("✅ Quiz finalized! Results are now available.");
@@ -193,6 +191,7 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
         clearInterval(interval);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, hasAnswered, isNoTimeQuiz]);
 
   const handleNoAnswer = async () => {
@@ -225,9 +224,14 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
           classCode: classCode,
           timeTaken: currentQuestion.time || 0, // Max time for timeout
         });
-        console.log("✅ Scheduled quiz timeout answer auto-submitted successfully");
+        console.log(
+          "✅ Scheduled quiz timeout answer auto-submitted successfully",
+        );
       } catch (error) {
-        console.error("❌ Failed to auto-submit scheduled quiz timeout answer:", error);
+        console.error(
+          "❌ Failed to auto-submit scheduled quiz timeout answer:",
+          error,
+        );
         // Continue with quiz flow even if submission fails
         // The error is logged for debugging but won't block progression
       }
@@ -261,55 +265,88 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
     finalWrongAns: number,
   ) => {
     if (classCode && user) {
-      await updateQuizTaken({ classCode, userId: user.id });
-
-      const finalLeaderboard = await updateLeaderBoard(
-        classCode,
-        user.id,
-        user.name || displayName || "",
-        user.avatar,
-        user.email,
-        finalScore,
-        finalRightAns,
-        finalWrongAns,
-      );
-
-      setScore(finalScore);
-      setRightAns(finalRightAns);
-      setWrongAns(finalWrongAns);
-      setLeaderboardData(finalLeaderboard || []);
-
-      const userIndex =
-        finalLeaderboard?.findIndex(
-          (entry) => entry.quiz_student_id === user.id,
-        ) ?? -1;
-      setUserRank(userIndex + 1);
-
-      // Check if quiz is finalized to determine if results are pending
-      let resultsPending = true;
       try {
-        const { data: quizData } = await supabase
-          .from("quiz")
-          .select("status")
-          .eq("class_code", classCode)
-          .single();
+        // CRITICAL: Use scheduled quiz-specific leaderboard update
+        // This ensures session_id exists before updating quiz_students
+        const finalLeaderboard = await updateScheduledQuizLeaderboard(
+          classCode,
+          user.id,
+          user.name || displayName || "",
+          user.avatar,
+          user.email,
+          finalScore,
+          finalRightAns,
+          finalWrongAns,
+        );
 
-        // Results are pending if quiz is not yet finalized
-        resultsPending =
-          quizData?.status !== "scheduled-completed" &&
-          quizData?.status !== "active";
+        // Update quiz_taken status after successful leaderboard update
+        await updateQuizTaken({ classCode, userId: user.id });
 
-        setIsResultsPending(resultsPending);
+        setScore(finalScore);
+        setRightAns(finalRightAns);
+        setWrongAns(finalWrongAns);
+        setLeaderboardData(finalLeaderboard || []);
 
-        // CRITICAL: Finalize student's attempt to ensure it appears in history
-        // This copies data from quiz_students → quiz_history
-        console.log("🔄 Finalizing student attempt for scheduled quiz...");
-        await finalizeStudentAttempt(classCode, user.id);
-        console.log("✅ Student attempt finalized - data will appear in dashboard");
+        const userIndex =
+          finalLeaderboard?.findIndex(
+            (entry) => entry.quiz_student_id === user.id,
+          ) ?? -1;
+        setUserRank(userIndex + 1);
+
+        // Check if quiz is finalized to determine if results are pending
+        let resultsPending = true;
+        try {
+          const { data: quizData } = await supabase
+            .from("quiz")
+            .select("status")
+            .eq("class_code", classCode)
+            .single();
+
+          // Results are pending if quiz is not yet finalized
+          resultsPending =
+            quizData?.status !== "scheduled-completed" &&
+            quizData?.status !== "active";
+
+          setIsResultsPending(resultsPending);
+
+          // CRITICAL: Finalize student's attempt to ensure it appears in history
+          // This copies data from quiz_students → quiz_history
+          // Only finalize if quiz_students insert was successful
+          console.log("🔄 Finalizing student attempt for scheduled quiz...");
+          await finalizeStudentAttempt(classCode, user.id);
+          console.log(
+            "✅ Student attempt finalized - data will appear in dashboard",
+          );
+        } catch (finalizeError) {
+          console.error(
+            "❌ Failed to finalize student attempt:",
+            finalizeError,
+          );
+          // Check if it's a duplicate key error (already finalized)
+          if (
+            finalizeError instanceof Error &&
+            finalizeError.message.includes("23505")
+          ) {
+            console.log("✅ Student already finalized - skipping");
+          } else {
+            // Log error but don't block UI - finalization can be retried
+            console.warn(
+              "⚠️ Finalization failed but student record exists in quiz_students",
+            );
+          }
+        }
       } catch (error) {
-        console.error("❌ Failed to finalize student attempt:", error);
-        // Don't block the UI flow - continue showing results
-        // The finalization can be retried or done by professor later
+        console.error("❌ Failed to update leaderboard:", error);
+        // Show error to user but don't crash the UI
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to save quiz results. Please contact your instructor.",
+        );
+        // Still show summary with local data
+        setLeaderboardData([]);
+        setUserRank(0);
+        setIsResultsPending(true);
       }
 
       setShowLeaderboard(true);
