@@ -296,16 +296,16 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
         // Check if quiz is finalized to determine if results are pending
         let resultsPending = true;
         try {
-          const { data: quizData } = await supabase
+          const { data: quizStatusData } = await supabase
             .from("quiz")
-            .select("status")
+            .select("status, current_session_id")
             .eq("class_code", classCode)
             .single();
 
           // Results are pending if quiz is not yet finalized
           resultsPending =
-            quizData?.status !== "scheduled-completed" &&
-            quizData?.status !== "active";
+            quizStatusData?.status !== "scheduled-completed" &&
+            quizStatusData?.status !== "active";
 
           setIsResultsPending(resultsPending);
 
@@ -317,6 +317,96 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
           console.log(
             "✅ Student attempt finalized - data will appear in dashboard",
           );
+
+          // CRITICAL: After finalization, fetch leaderboard from quiz_history
+          // because quiz_students record is deleted after finalization
+          // Combine both quiz_students (ongoing) and quiz_history (finalized) for complete view
+          const sessionId = quizStatusData?.current_session_id;
+
+          if (sessionId) {
+            const [ongoingStudents, finalizedStudents] = await Promise.all([
+              // Get ongoing attempts from quiz_students
+              supabase
+                .from("quiz_students")
+                .select("*")
+                .eq("class_code", classCode)
+                .eq("session_id", sessionId)
+                .order("score", { ascending: false }),
+              // Get finalized attempts from quiz_history
+              supabase
+                .from("quiz_history")
+                .select("*")
+                .eq("class_code", classCode)
+                .eq("session_id", sessionId)
+                .order("score", { ascending: false }),
+            ]);
+
+            // Combine and deduplicate (prioritize finalized over ongoing)
+            const studentMap = new Map<string, LeaderboardEntry>();
+
+            // Add ongoing students first
+            (ongoingStudents.data || []).forEach(
+              (entry: {
+                id: string;
+                quiz_student_id: string;
+                student_name: string;
+                student_email: string;
+                student_avatar: string;
+                score: number;
+                right_answer: number;
+                wrong_answer: number;
+              }) => {
+                studentMap.set(entry.quiz_student_id, {
+                  id: entry.id,
+                  quiz_student_id: entry.quiz_student_id,
+                  student_name: entry.student_name,
+                  student_email: entry.student_email,
+                  student_avatar: entry.student_avatar,
+                  score: entry.score || 0,
+                  right_answer: entry.right_answer || 0,
+                  wrong_answer: entry.wrong_answer || 0,
+                });
+              },
+            );
+
+            // Add finalized students (will overwrite if duplicate)
+            (finalizedStudents.data || []).forEach(
+              (entry: {
+                id: string;
+                quiz_student_id: string;
+                student_name: string;
+                student_email: string;
+                student_avatar: string;
+                score: number;
+                right_answer: number;
+                wrong_answer: number;
+              }) => {
+                studentMap.set(entry.quiz_student_id, {
+                  id: entry.id,
+                  quiz_student_id: entry.quiz_student_id,
+                  student_name: entry.student_name,
+                  student_email: entry.student_email,
+                  student_avatar: entry.student_avatar,
+                  score: entry.score || 0,
+                  right_answer: entry.right_answer || 0,
+                  wrong_answer: entry.wrong_answer || 0,
+                });
+              },
+            );
+
+            // Sort by score
+            const combinedLeaderboard = Array.from(studentMap.values()).sort(
+              (a, b) => b.score - a.score,
+            );
+
+            setLeaderboardData(combinedLeaderboard);
+
+            // Update user rank
+            const userIndex = combinedLeaderboard.findIndex(
+              (entry) => entry.quiz_student_id === user.id,
+            );
+            setUserRank(userIndex >= 0 ? userIndex + 1 : 0);
+          }
         } catch (finalizeError) {
           console.error(
             "❌ Failed to finalize student attempt:",
@@ -328,6 +418,55 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
             finalizeError.message.includes("23505")
           ) {
             console.log("✅ Student already finalized - skipping");
+            // Still try to fetch from quiz_history
+            try {
+              const { data: quizSessionData } = await supabase
+                .from("quiz")
+                .select("current_session_id")
+                .eq("class_code", classCode)
+                .single();
+
+              if (quizSessionData?.current_session_id) {
+                const { data: historyData } = await supabase
+                  .from("quiz_history")
+                  .select("*")
+                  .eq("class_code", classCode)
+                  .eq("session_id", quizSessionData.current_session_id)
+                  .order("score", { ascending: false });
+
+                if (historyData) {
+                  const mappedData = historyData.map(
+                    (entry: {
+                      id: string;
+                      quiz_student_id: string;
+                      student_name: string;
+                      student_email: string;
+                      student_avatar: string;
+                      score: number;
+                      right_answer: number;
+                      wrong_answer: number;
+                    }) => ({
+                      id: entry.id,
+                      quiz_student_id: entry.quiz_student_id,
+                      student_name: entry.student_name,
+                      student_email: entry.student_email,
+                      student_avatar: entry.student_avatar,
+                      score: entry.score || 0,
+                      right_answer: entry.right_answer || 0,
+                      wrong_answer: entry.wrong_answer || 0,
+                    }),
+                  );
+
+                  setLeaderboardData(mappedData);
+                  const userIndex = mappedData.findIndex(
+                    (entry) => entry.quiz_student_id === user.id,
+                  );
+                  setUserRank(userIndex >= 0 ? userIndex + 1 : 0);
+                }
+              }
+            } catch (fetchError) {
+              console.error("Failed to fetch from quiz_history:", fetchError);
+            }
           } else {
             // Log error but don't block UI - finalization can be retried
             console.warn(

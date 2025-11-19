@@ -664,9 +664,56 @@ export async function submitScheduledAnswer(
       },
     ]);
 
-    console.log(
-      `✅ Answer stored - Session: ${quizData.current_session_id}, Correct: ${isCorrect}`,
-    );
+    // CRITICAL: Immediately update score in quiz_students for real-time leaderboard updates
+    // Get all answers for this student to calculate current score
+    const { data: allAnswers } = await supabase
+      .from("quiz_student_answers")
+      .select("is_correct, quiz_questions(points)")
+      .eq("quiz_student_id", quizStudent.id)
+      .eq("class_code", classCode)
+      .eq("session_id", quizData.current_session_id);
+
+    if (allAnswers && allAnswers.length > 0) {
+      // Recalculate score from all answers
+      let totalScore = 0;
+      let rightAns = 0;
+      let wrongAns = 0;
+
+      allAnswers.forEach((answerData: any) => {
+        const points = answerData.quiz_questions?.points || 0;
+        if (answerData.is_correct) {
+          totalScore += points;
+          rightAns++;
+        } else {
+          wrongAns++;
+        }
+      });
+
+      // Update quiz_students with recalculated score for real-time leaderboard
+      await supabase
+        .from("quiz_students")
+        .update({
+          score: totalScore,
+          right_answer: rightAns,
+          wrong_answer: wrongAns,
+          session_id: quizData.current_session_id, // Ensure session_id is preserved
+        })
+        .match({
+          id: quizStudent.id,
+          quiz_student_id: studentId,
+          class_code: classCode,
+          session_id: quizData.current_session_id,
+        });
+
+      console.log(
+        `✅ Answer stored and score updated - Session: ${quizData.current_session_id}, Score: ${totalScore}, Correct: ${isCorrect}`,
+      );
+    } else {
+      console.log(
+        `✅ Answer stored - Session: ${quizData.current_session_id}, Correct: ${isCorrect}`,
+      );
+    }
+
     return isCorrect;
   } catch (error) {
     console.error("Error storing individual answer for scheduled quiz:", error);

@@ -910,13 +910,30 @@ export async function updateLeaderBoard(
       .order("score", { ascending: false });
 
     if (allStudents) {
+      // CRITICAL: Include session_id in placement updates to prevent NULL constraint violation
       const updates = allStudents.map((student, index) => ({
         id: student.id,
         quiz_student_id: student.quiz_student_id,
         placement: index + 1,
+        session_id: sessionId, // CRITICAL: Must include session_id
       }));
 
-      await supabase.from("quiz_students").upsert(updates);
+      // Use update instead of upsert to ensure session_id is preserved
+      const updatePromises = updates.map((update) =>
+        supabase
+          .from("quiz_students")
+          .update({
+            placement: update.placement,
+            session_id: update.session_id,
+          })
+          .match({
+            id: update.id,
+            quiz_student_id: update.quiz_student_id,
+            session_id: sessionId,
+          }),
+      );
+
+      await Promise.all(updatePromises);
       console.log("Leaderboard updated successfully.");
       return allStudents;
     }

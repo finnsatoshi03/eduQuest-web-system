@@ -37,7 +37,7 @@ CREATE TABLE public.quiz_history (
   quiz_taken boolean DEFAULT true,
   completed_at timestamp without time zone DEFAULT now(),
   created_at timestamp without time zone DEFAULT now(),
-  session_id uuid DEFAULT gen_random_uuid(),
+  session_id uuid NOT NULL DEFAULT gen_random_uuid(),
   CONSTRAINT quiz_history_pkey PRIMARY KEY (id),
   CONSTRAINT quiz_history_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id),
   CONSTRAINT quiz_history_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
@@ -68,7 +68,7 @@ CREATE TABLE public.quiz_student_answers (
   student_name text,
   student_email text,
   class_code uuid,
-  session_id uuid,
+  session_id uuid NOT NULL,
   CONSTRAINT quiz_student_answers_pkey PRIMARY KEY (id),
   CONSTRAINT quiz_student_answers_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id),
   CONSTRAINT quiz_student_answers_quiz_question_id_fkey FOREIGN KEY (quiz_question_id) REFERENCES public.quiz_questions(quiz_question_id),
@@ -86,7 +86,7 @@ CREATE TABLE public.quiz_students (
   student_avatar text,
   student_email text,
   quiz_taken boolean,
-  session_id uuid,
+  session_id uuid NOT NULL,
   CONSTRAINT quiz_students_pkey PRIMARY KEY (id),
   CONSTRAINT quiz_students_class_code_fkey FOREIGN KEY (class_code) REFERENCES public.quiz(class_code)
 );
