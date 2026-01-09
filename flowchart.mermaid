@@ -1,0 +1,249 @@
+graph TB
+    %% User Entry Points
+    Users([👥 Users<br/>Students & Professors])
+    
+    %% ==================== FRONTEND LAYER ====================
+    subgraph "🖥️ Frontend Application - React/TypeScript"
+        direction TB
+        
+        subgraph "🌐 Public Pages"
+            Landing[🏠 Landing Page]
+            About[ℹ️ About Page] 
+            FAQ[❓ FAQ Page]
+            Contact[📧 Contact Page]
+            Terms[📋 Terms & Privacy]
+        end
+        
+        subgraph "🔐 Authentication System"
+            Login[🔑 Login]
+            Signup[📝 Signup]
+            GoogleAuth[🔍 Google OAuth]
+            EmailVerif[✉️ Email Verification]
+            RoleAssign[👤 Role Assignment]
+        end
+        
+        subgraph "🎓 Student Features"
+            StudDash[📊 Student Dashboard<br/>📜 Quiz History<br/>📈 Score Tracking<br/>📉 Performance Trends]
+            StudLobby[🎮 Game Lobby]
+            StudQuizRoom[📝 Quiz Room]
+            StudAnswer[✍️ Answer Interface]
+            StudLeaderboard[🏆 Leaderboard]
+            StudScheduled[📅 Scheduled Quizzes]
+            StudHistory[📜 Quiz History Details]
+            StudPerformance[📊 Performance Analytics]
+        end
+
+        subgraph "👨‍🏫 Professor Features"
+            ProfDash[📋 Professor Dashboard<br/>📊 Performance Summary<br/>👥 Student Participation<br/>📈 Quiz Statistics]
+            QuizCreate[➕ Quiz Creation]
+            QuizCustomize[⚙️ Quiz Customization]
+            QuestionManage[❓ Question Management]
+            ProfGameRoom[🎯 Game Control Room]
+            LiveAnalytics[📈 Live Analytics]
+            ResponseReview[📊 Response Analysis]
+            ExcelExport[📑 Excel Export<br/>4 Sheets: Summary, Student Results,<br/>Detailed Answers, Question Analytics]
+        end
+        
+        subgraph "🔄 State Management"
+            AuthContext[🔐 Auth Context]
+            QuizContext[📝 Quiz Context]
+            GameContext[🎮 Game Context]
+            RealtimeContext[⚡ Realtime Context]
+        end
+    end
+    
+    %% ==================== API LAYER ====================
+    subgraph "🔌 API Services Layer"
+        AuthAPI[🔐 Authentication API]
+        QuizAPI[📝 Quiz Management API]
+        RoomAPI[🎮 Game Room API]
+        ClassAPI[🏫 Class Management API]
+        ScheduledAPI[📅 Scheduled Quiz API]
+        ExportAPI[📊 Export API<br/>Excel Generation Service]
+        AnalyticsAPI[📈 Analytics API<br/>Dashboard Data Service]
+    end
+    
+    %% ==================== CORE AI ENGINE ====================
+    subgraph "🤖 AI Quiz Generation Engine"
+        direction TB
+        NLPService[🐍 Python NLP Service<br/>PDF Question Generator]
+        PDFProcessor[📄 PDF Text Extraction]
+        QuestionGenerator[🧠 AI Question Generation<br/>MCQ, True/False, Fill-in-blank]
+        ContentAnalyzer[🔍 Content Analysis & Classification]
+    end
+    
+    %% ==================== BACKEND SERVICES ====================
+    subgraph "🏗️ Supabase Backend Platform"
+        direction TB
+        
+        subgraph "🔑 Authentication"
+            SupaAuth[Supabase Auth<br/>JWT + OAuth]
+            UserManagement[👥 User Management]
+        end
+        
+        subgraph "💾 Database Layer"
+            SupaDB[(🗄️ PostgreSQL Database)]
+            
+            subgraph "📊 Database Tables"
+                UsersTable[(👤 user)]
+                QuizTable[(📝 quiz)]
+                QuestionsTable[(❓ quiz_questions)]
+                QuizHistoryTable[(📜 quiz_history)]
+                QuizStudentsTable[(👥 quiz_students)]
+                QuizStudentAnswersTable[(✍️ quiz_student_answers)]
+                TempRoomTable[(⏱️ temp_room)]
+                TempRoomQuestionsTable[(❓ temp_room_questions)]
+            end
+        end
+        
+        subgraph "📁 Storage & Files"
+            SupaStorage[📁 Supabase Storage<br/>Images, PDFs, Avatars]
+        end
+        
+        subgraph "⚡ Real-time Engine"
+            SupaRealtime[⚡ Supabase Realtime]
+            GameBroadcast[📡 Game Events Broadcasting]
+            TimerSync[⏰ Timer Synchronization]
+            LiveUpdates[🔄 Live Score Updates]
+            ParticipantSync[👥 Participant Management]
+        end
+    end
+    
+    %% ==================== EXTERNAL SERVICES ====================
+    subgraph "🌍 External Services"
+        GoogleOAuth[🔍 Google OAuth Provider]
+        EmailService[📧 Email Service Provider]
+    end
+    
+    %% ==================== USER FLOW CONNECTIONS ====================
+    Users --> Landing
+    Users --> Login
+    Users --> Signup
+    
+    %% Public Navigation
+    Landing --> About
+    Landing --> FAQ
+    Landing --> Contact
+    Landing --> Terms
+    Landing --> Login
+    Landing --> Signup
+    
+    %% Authentication Flow
+    Login --> AuthAPI
+    Signup --> AuthAPI
+    Login --> GoogleAuth
+    Signup --> GoogleAuth
+    GoogleAuth --> GoogleOAuth
+    AuthAPI --> SupaAuth
+    SupaAuth --> EmailVerif
+    EmailVerif --> RoleAssign
+    RoleAssign --> StudDash
+    RoleAssign --> ProfDash
+    
+    %% Student Journey
+    StudDash --> StudLobby
+    StudDash --> StudScheduled
+    StudDash --> StudHistory
+    StudDash --> StudPerformance
+    StudLobby --> StudQuizRoom
+    StudQuizRoom --> StudAnswer
+    StudAnswer --> StudLeaderboard
+    StudLeaderboard --> StudHistory
+
+    %% Professor Journey
+    ProfDash --> QuizCreate
+    QuizCreate --> QuizCustomize
+    QuizCreate --> NLPService
+    QuizCustomize --> QuestionManage
+    QuestionManage --> ProfGameRoom
+    ProfGameRoom --> LiveAnalytics
+    LiveAnalytics --> ResponseReview
+    ResponseReview --> ExcelExport
+    ProfGameRoom --> ExcelExport
+    
+    %% ==================== API INTEGRATIONS ====================
+    AuthAPI --> SupaAuth
+    QuizAPI --> SupaDB
+    RoomAPI --> SupaRealtime
+    ClassAPI --> SupaDB
+    ScheduledAPI --> SupaDB
+    ExportAPI --> SupaDB
+    AnalyticsAPI --> SupaDB
+
+    %% New Feature Integrations
+    ExcelExport --> ExportAPI
+    StudHistory --> AnalyticsAPI
+    StudPerformance --> AnalyticsAPI
+    ProfDash --> AnalyticsAPI
+    
+    %% AI Engine Integration
+    QuizCreate --> NLPService
+    NLPService --> PDFProcessor
+    PDFProcessor --> ContentAnalyzer
+    ContentAnalyzer --> QuestionGenerator
+    QuestionGenerator --> QuizAPI
+    
+    %% Context Management
+    AuthContext --> AuthAPI
+    QuizContext --> QuizAPI
+    GameContext --> RoomAPI
+    RealtimeContext --> SupaRealtime
+    
+    %% ==================== REAL-TIME FEATURES ====================
+    SupaRealtime --> GameBroadcast
+    SupaRealtime --> TimerSync
+    SupaRealtime --> LiveUpdates
+    SupaRealtime --> ParticipantSync
+    
+    GameBroadcast --> StudLobby
+    GameBroadcast --> ProfGameRoom
+    TimerSync --> StudAnswer
+    LiveUpdates --> StudLeaderboard
+    LiveUpdates --> LiveAnalytics
+    ParticipantSync --> StudLobby
+    ParticipantSync --> ProfGameRoom
+    
+    %% ==================== DATABASE RELATIONSHIPS ====================
+    SupaDB --> UsersTable
+    SupaDB --> QuizTable
+    SupaDB --> QuestionsTable
+    SupaDB --> QuizHistoryTable
+    SupaDB --> QuizStudentsTable
+    SupaDB --> QuizStudentAnswersTable
+    SupaDB --> TempRoomTable
+    SupaDB --> TempRoomQuestionsTable
+    
+    %% Storage Integration
+    SupaStorage --> StudDash
+    SupaStorage --> ProfDash
+    SupaStorage --> NLPService
+    
+    %% External Service Integration
+    SupaAuth --> GoogleOAuth
+    SupaAuth --> EmailService
+    
+    %% ==================== STYLING WITH GOOD CONTRAST ====================
+    classDef publicPages fill:#dbeafe,stroke:#1e40af,stroke-width:3px,color:#1e3a8a
+    classDef authPages fill:#fce7f3,stroke:#be185d,stroke-width:3px,color:#831843
+    classDef studentPages fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d
+    classDef professorPages fill:#fed7aa,stroke:#ea580c,stroke-width:3px,color:#9a3412
+    classDef stateManagement fill:#f3e8ff,stroke:#7c3aed,stroke-width:3px,color:#4c1d95
+    classDef apiLayer fill:#fef3c7,stroke:#d97706,stroke-width:3px,color:#92400e
+    classDef aiEngine fill:#ffedd5,stroke:#ea580c,stroke-width:3px,color:#c2410c
+    classDef database fill:#ecfdf5,stroke:#10b981,stroke-width:3px,color:#047857
+    classDef realtime fill:#f0fdfa,stroke:#0d9488,stroke-width:3px,color:#134e4a
+    classDef external fill:#f8fafc,stroke:#475569,stroke-width:3px,color:#334155
+    classDef users fill:#fef2f2,stroke:#dc2626,stroke-width:4px,color:#991b1b
+    
+    %% Apply Classes
+    class Landing,About,FAQ,Contact,Terms publicPages
+    class Login,Signup,GoogleAuth,EmailVerif,RoleAssign authPages
+    class StudDash,StudLobby,StudQuizRoom,StudAnswer,StudLeaderboard,StudScheduled,StudHistory,StudPerformance studentPages
+    class ProfDash,QuizCreate,QuizCustomize,QuestionManage,ProfGameRoom,LiveAnalytics,ResponseReview,ExcelExport professorPages
+    class AuthContext,QuizContext,GameContext,RealtimeContext stateManagement
+    class AuthAPI,QuizAPI,RoomAPI,ClassAPI,ScheduledAPI,ExportAPI,AnalyticsAPI apiLayer
+    class NLPService,PDFProcessor,QuestionGenerator,ContentAnalyzer aiEngine
+    class SupaDB,UsersTable,QuizTable,QuestionsTable,QuizHistoryTable,QuizStudentsTable,QuizStudentAnswersTable,TempRoomTable,TempRoomQuestionsTable,SupaStorage database
+    class SupaRealtime,GameBroadcast,TimerSync,LiveUpdates,ParticipantSync realtime
+    class GoogleOAuth,EmailService external
+    class Users users
