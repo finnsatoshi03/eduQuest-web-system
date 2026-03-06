@@ -1,1 +1,2 @@
-export const qgen = "http://localhost:5000/generate-questions";
+export const qgen =
+  import.meta.env.VITE_QUIZ_GENERATOR_URL || "/api/generate-quiz";

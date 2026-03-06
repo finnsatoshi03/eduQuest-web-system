@@ -269,20 +269,25 @@ export async function generateQuestions(
   file: File,
   questionType: string,
   numQuestions: string,
-): Promise<QuizQuestions | null> {
+  quizSettings?: Record<string, string | number | boolean>,
+): Promise<QuizQuestions[] | null> {
+  let generateQuestionsResponse;
   try {
     const formData = new FormData();
     formData.append("pdf", file);
     formData.append("question_type", questionType);
     formData.append("num_questions", numQuestions);
+    if (quizSettings && Object.keys(quizSettings).length > 0) {
+      formData.append("settings", JSON.stringify(quizSettings));
+    }
 
-    const generateQuestions = await axios.post(qgen, formData, {
+    generateQuestionsResponse = await axios.post(qgen, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
 
-    if (generateQuestions.status === 200) {
+    if (generateQuestionsResponse.status === 200) {
       // const response_data = { sample response for T/F and Q&A
       //   "questions": [
       //     {
@@ -303,12 +308,12 @@ export async function generateQuestions(
       // }
       // console.log(generateQuestions.data.questions);
 
-      return generateQuestions.data.questions;
+      return generateQuestionsResponse.data.questions;
     } else {
       throw new Error("Something went wrong! Please try again later.");
     }
   } catch {
-    console.log("Error generating questions:", generateQuestions);
+    console.log("Error generating questions:", generateQuestionsResponse);
     throw new Error("Something went wrong! Please try again later.");
   }
 }

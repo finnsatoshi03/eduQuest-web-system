@@ -61,6 +61,9 @@ npm install
 # VITE_SUPABASE_URL=your_supabase_url
 # VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 # VITE_GOOGLE_RECAPTCHA_SITE_KEY=your_recaptcha_site_key
+# OPENAI_API_KEY=your_openai_api_key
+# OPENAI_QUIZ_MODEL=gpt-4.1-mini
+# VITE_QUIZ_GENERATOR_URL=/api/generate-quiz
 
 # Start the development server
 npm run dev
