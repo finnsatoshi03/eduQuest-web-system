@@ -4,10 +4,6 @@ import {
   getQuizDetailedAnalytics,
   getPerformanceTrends,
   getQuestionDifficultyAnalysis,
-  ProfessorOverallStats,
-  QuizDetailedAnalytics,
-  PerformanceTrendData,
-  QuestionDifficultyAnalysis,
 } from "@/services/api/apiAnalytics";
 
 /**

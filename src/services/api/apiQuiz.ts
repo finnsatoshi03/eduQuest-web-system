@@ -515,7 +515,7 @@ export async function updateQuizAndQuestions(
     const total_points = questions.reduce((sum, q) => sum + (q.points || 0), 0);
 
     // Determine quiz status based on open_time and close_time
-    let status = QUIZ_STATUS.ACTIVE;
+    let status: QuizStatus = QUIZ_STATUS.ACTIVE;
     if (quizData.open_time && quizData.close_time) {
       status = QUIZ_STATUS.SCHEDULED;
     }

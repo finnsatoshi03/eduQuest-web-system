@@ -241,7 +241,7 @@ const ScheduledQuizRoute: React.FC = () => {
             isLoading: false,
           }));
         } else {
-          const status = await checkQuizStatus(classId, user, displayName);
+          const status = await checkQuizStatus(classId, user);
           setQuizStatus({
             isLoading: false,
             hasTaken: status.hasTaken,
@@ -280,7 +280,7 @@ const ScheduledQuizRoute: React.FC = () => {
     if (!user || !classId) return;
 
     try {
-      const status = await checkQuizStatus(classId, user, name);
+      const status = await checkQuizStatus(classId, user);
       setDisplayNameRequired(false);
       setDisplayName(name);
       setQuizStatus({

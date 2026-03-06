@@ -142,7 +142,7 @@ export async function getProfessorOverallStats(
  */
 export async function getQuizDetailedAnalytics(
   quizId: string,
-  classCode: string,
+  _classCode: string,
 ): Promise<QuizDetailedAnalytics | null> {
   try {
     // Get quiz details

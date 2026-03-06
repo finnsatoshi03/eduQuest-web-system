@@ -7,8 +7,6 @@ import {
   getStudentPerformanceBySubject,
   getFilteredQuizHistory,
   StudentQuizHistory,
-  StudentPerformanceStats,
-  SubjectPerformance,
 } from "@/services/api/apiStudent";
 
 /**
