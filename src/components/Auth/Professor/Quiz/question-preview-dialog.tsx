@@ -163,28 +163,55 @@ const QuizPreviewDialog = ({ open, onOpenChange }: QuizPreviewDialogProps) => {
   const renderFillInTheBlank = () => {
     if (!currentQuestion) return null;
 
+    const answerChars = Array.from(currentQuestion.right_answer ?? "");
+    const wordCharGroups = (() => {
+      const groups: number[][] = [];
+      let currentGroup: number[] = [];
+
+      answerChars.forEach((char, index) => {
+        if (/\s/.test(char)) {
+          if (currentGroup.length > 0) {
+            groups.push(currentGroup);
+            currentGroup = [];
+          }
+          return;
+        }
+        currentGroup.push(index);
+      });
+
+      if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+      }
+
+      return groups;
+    })();
+
     return (
-      <div className="mt-4 flex flex-col items-center justify-center rounded-lg bg-zinc-900 p-4">
+      <div className="mt-4 flex flex-col items-center justify-center rounded-lg bg-zinc-200 p-4 dark:bg-zinc-800">
         <h1 className="mb-4 text-center font-bold opacity-70">
-          Type your answer in the boxes
+          Type your answer in the boxes (spaces are already included)
         </h1>
         <div
-          className="grid gap-1"
+          className="flex max-w-full flex-wrap justify-center gap-x-3 gap-y-2"
           style={{
-            gridTemplateColumns: `repeat(${Math.min(
-              currentQuestion.right_answer.length,
-              isTabletorMobile ? 5 : 10,
-            )}, 1fr)`,
+            maxWidth: isTabletorMobile ? "18rem" : "32rem",
           }}
         >
-          {currentQuestion.right_answer.split("").map((char, index) => (
+          {wordCharGroups.map((group, groupIndex) => (
             <div
-              key={index}
-              className={`flex size-12 items-center justify-center rounded-lg text-center text-white ${
-                showAnswers ? "bg-green-500" : "bg-zinc-700"
-              }`}
+              key={`word-${groupIndex}`}
+              className="flex shrink-0 items-center gap-1"
             >
-              {showAnswers ? char : ""}
+              {group.map((charIndex) => (
+                <div
+                  key={charIndex}
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg text-center text-base text-white sm:h-12 sm:w-12 ${
+                    showAnswers ? "bg-green-500" : "bg-zinc-700"
+                  }`}
+                >
+                  {showAnswers ? answerChars[charIndex] : ""}
+                </div>
+              ))}
             </div>
           ))}
         </div>

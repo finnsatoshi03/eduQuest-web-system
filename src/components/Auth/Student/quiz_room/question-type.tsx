@@ -130,26 +130,99 @@ const FillInTheBlank: React.FC<{
   inputRefs,
   isTabletOrMobile,
 }) => {
+  const answerChars = Array.from(rightAnswer);
+  const wordCharGroups = (() => {
+    const groups: number[][] = [];
+    let currentGroup: number[] = [];
+
+    answerChars.forEach((char, index) => {
+      if (/\s/.test(char)) {
+        if (currentGroup.length > 0) {
+          groups.push(currentGroup);
+          currentGroup = [];
+        }
+        return;
+      }
+      currentGroup.push(index);
+    });
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  })();
+
+  const editableIndexes = answerChars
+    .map((char, index) => (/\s/.test(char) ? -1 : index))
+    .filter((index) => index !== -1);
+
+  const getNextEditableIndex = (currentIndex: number): number | null => {
+    const currentPosition = editableIndexes.indexOf(currentIndex);
+    if (currentPosition === -1 || currentPosition >= editableIndexes.length - 1) {
+      return null;
+    }
+    return editableIndexes[currentPosition + 1];
+  };
+
+  const getPreviousEditableIndex = (currentIndex: number): number | null => {
+    const currentPosition = editableIndexes.indexOf(currentIndex);
+    if (currentPosition <= 0) {
+      return null;
+    }
+    return editableIndexes[currentPosition - 1];
+  };
+
+  const composeAnswer = (input: string[]) =>
+    answerChars
+      .map((char, index) => {
+        if (/\s/.test(char)) {
+          return char;
+        }
+        return input[index] || "";
+      })
+      .join("");
+
   const handleInputChange = (index: number, value: string) => {
     const newInput = [...answerInput];
     newInput[index] = value;
     setAnswerInput(newInput);
 
     // Auto-focus next input if available
-    if (index < rightAnswer.length - 1 && value !== "") {
-      inputRefs.current?.[index + 1]?.focus();
+    if (value !== "") {
+      const nextIndex = getNextEditableIndex(index);
+      if (nextIndex !== null) {
+        inputRefs.current?.[nextIndex]?.focus();
+      }
     }
 
-    // Submit answer if all boxes are filled
-    const allFilled = newInput.filter(Boolean).length === rightAnswer.length;
+    // Submit answer if all editable boxes are filled
+    const allFilled = editableIndexes.every((editableIndex) =>
+      Boolean(newInput[editableIndex]),
+    );
     if (allFilled && !hasAnswered) {
-      handleAnswer(newInput.join(""));
+      handleAnswer(composeAnswer(newInput));
+    }
+  };
+
+  const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Backspace") {
+      return;
+    }
+
+    if (answerInput[index]) {
+      return;
+    }
+
+    const previousIndex = getPreviousEditableIndex(index);
+    if (previousIndex !== null) {
+      inputRefs.current?.[previousIndex]?.focus();
     }
   };
 
   const getInputClasses = () =>
     [
-      "flex size-12 items-center justify-center rounded-lg bg-zinc-700 text-center text-white",
+      "flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-700 text-center text-base text-white sm:h-12 sm:w-12",
       effect === "correct" && "animate-pulse-green",
       effect === "wrong" && "!bg-red-600",
     ]
@@ -159,31 +232,38 @@ const FillInTheBlank: React.FC<{
   return (
     <div className="mt-4 flex flex-col items-center justify-center rounded-lg bg-zinc-200 p-4 dark:bg-zinc-800">
       <h1 className="mb-4 text-center font-bold opacity-70">
-        Type your answer in the boxes
+        Type your answer in the boxes (spaces are already included)
       </h1>
       <div
-        className={`grid gap-1 ${effect === "wrong" ? "animate-shake" : ""}`}
+        className={`flex max-w-full flex-wrap justify-center gap-x-3 gap-y-2 ${
+          effect === "wrong" ? "animate-shake" : ""
+        }`}
         style={{
-          gridTemplateColumns: `repeat(${Math.min(
-            rightAnswer.length,
-            isTabletOrMobile ? 5 : 10,
-          )}, 1fr)`,
+          maxWidth: isTabletOrMobile ? "18rem" : "32rem",
         }}
       >
-        {rightAnswer.split("").map((_, index) => (
-          <Input
-            key={index}
-            ref={(el) => {
-              if (inputRefs.current) {
-                inputRefs.current[index] = el;
-              }
-            }}
-            className={getInputClasses()}
-            maxLength={1}
-            value={answerInput[index] || ""}
-            onChange={(e) => handleInputChange(index, e.target.value)}
-            disabled={hasAnswered}
-          />
+        {wordCharGroups.map((group, groupIndex) => (
+          <div
+            key={`word-${groupIndex}`}
+            className="flex shrink-0 items-center gap-1"
+          >
+            {group.map((charIndex) => (
+              <Input
+                key={charIndex}
+                ref={(el) => {
+                  if (inputRefs.current) {
+                    inputRefs.current[charIndex] = el;
+                  }
+                }}
+                className={getInputClasses()}
+                maxLength={1}
+                value={answerInput[charIndex] || ""}
+                onChange={(e) => handleInputChange(charIndex, e.target.value)}
+                onKeyDown={(event) => handleKeyDown(charIndex, event)}
+                disabled={hasAnswered}
+              />
+            ))}
+          </div>
         ))}
       </div>
     </div>
