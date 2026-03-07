@@ -57,24 +57,40 @@ cd eduquest-web-system
 npm install
 
 # Set up environment variables
-# Create a .env file with the following variables:
+# Copy .env.example to .env.local and set values:
 # VITE_SUPABASE_URL=your_supabase_url
 # VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 # VITE_GOOGLE_RECAPTCHA_SITE_KEY=your_recaptcha_site_key
 # OPENAI_API_KEY=your_openai_api_key
 # OPENAI_QUIZ_MODEL=gpt-4.1-mini
 # VITE_QUIZ_GENERATOR_URL=/api/generate-quiz
+# VITE_LOCAL_API_TARGET=http://localhost:3000
 
-# Start the development server
-npm run dev
+# Login once to Vercel CLI
+vercel login
+
+# Start local dev with frontend + /api routes
+npm run dev:vercel
 ```
 
 ## 📝 Scripts
 
-- `npm run dev` - Start the development server
+- `npm run dev` - Start Vite only (no `/api` functions)
+- `npm run dev:vercel` - Start Vercel local runtime (frontend + `/api` functions)
+- `npm run dev:vite` - Alias for Vite only
 - `npm run build` - Build for production
 - `npm run lint` - Run ESLint to check code quality
 - `npm run preview` - Preview the production build locally
+
+## Local API Check
+
+With `npm run dev:vercel` running, this should return `405 Method not allowed` (route exists and only accepts POST):
+
+```bash
+curl -i http://localhost:3000/api/generate-quiz
+```
+
+If you open the Vite URL (`http://localhost:5173`) during local development, `/api/*` requests are proxied to `http://localhost:3000` automatically via Vite proxy config.
 
 ## 📄 License
 

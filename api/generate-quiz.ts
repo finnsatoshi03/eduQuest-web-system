@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
+import { buildPrompt, type PromptQuestionType } from "../lib/buildPrompt.js";
 
 export const config = {
   runtime: "nodejs",
@@ -12,15 +13,10 @@ const MAX_QUESTIONS = 50;
 const CHUNK_TARGET_TOKENS = 1000;
 const CHUNK_MAX_TOKENS = 1200;
 const MAX_INITIAL_CHUNKS = 4;
-const MAX_RETRY_PASSES = 3;
+const MAX_FILL_PASSES = 6;
+const MAX_MALFORMED_RETRIES = 2;
 
-type SupportedQuestionType = "mcq" | "boolean" | "short";
-
-interface GeneratedQuestion {
-  question?: string;
-  right_answer?: string;
-  distractor?: string[];
-}
+type SupportedQuestionType = PromptQuestionType;
 
 interface LegacyQuestion {
   id: number;
@@ -28,6 +24,18 @@ interface LegacyQuestion {
   question_type: SupportedQuestionType;
   right_answer: string;
   distractor: string[];
+}
+
+interface CandidateQuestion {
+  id: number;
+  question: string;
+  question_type: string;
+  right_answer: string;
+  distractor: string[];
+}
+
+interface LegacyResponse {
+  questions: CandidateQuestion[];
 }
 
 interface BatchRequest {
@@ -49,9 +57,15 @@ interface GenerationRequest {
 }
 
 const SYSTEM_PROMPT =
-  "You create high-quality classroom quiz questions. Use only the provided source text, avoid duplicates, and output JSON only.";
+  "You create high-quality classroom quiz questions. Follow every instruction exactly and output JSON only.";
 
 export default async function handler(request: Request): Promise<Response> {
+  console.log("generate-quiz endpoint hit", {
+    method: request.method,
+    path: "/api/generate-quiz",
+    time: new Date().toISOString(),
+  });
+
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
@@ -71,13 +85,16 @@ export default async function handler(request: Request): Promise<Response> {
   if (!(uploadedFile instanceof File)) {
     return jsonResponse({ error: "No PDF file uploaded" }, 400);
   }
+
   const isPdfByType = uploadedFile.type.toLowerCase().includes("pdf");
   const isPdfByName = uploadedFile.name.toLowerCase().endsWith(".pdf");
   if (!isPdfByType && !isPdfByName) {
     return jsonResponse({ error: "Uploaded file must be a PDF" }, 400);
   }
 
-  const questionType = normalizeQuestionType(toStringValue(formData.get("question_type")));
+  const questionType = normalizeQuestionType(
+    toStringValue(formData.get("question_type")),
+  );
   if (!questionType) {
     return jsonResponse(
       { error: "Invalid question_type. Use mcq, boolean, or short." },
@@ -150,13 +167,25 @@ export default async function handler(request: Request): Promise<Response> {
 function normalizeQuestionType(rawType: string): SupportedQuestionType | null {
   const normalized = rawType.trim().toLowerCase();
 
-  if (["mcq", "multiple choice", "multiple-choice", "multiple_choice"].includes(normalized)) {
+  if (
+    ["mcq", "multiple choice", "multiple-choice", "multiple_choice"].includes(
+      normalized,
+    )
+  ) {
     return "mcq";
   }
-  if (["boolean", "true/false", "true false", "true or false", "tf"].includes(normalized)) {
+  if (
+    ["boolean", "true/false", "true false", "true or false", "tf"].includes(
+      normalized,
+    )
+  ) {
     return "boolean";
   }
-  if (["short", "identification", "fill in the blank", "fill-in-the-blank"].includes(normalized)) {
+  if (
+    ["short", "identification", "fill in the blank", "fill-in-the-blank"].includes(
+      normalized,
+    )
+  ) {
     return "short";
   }
 
@@ -288,6 +317,14 @@ function distributeCount(total: number, buckets: number): number[] {
   return Array.from({ length: buckets }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
+function buildFillOrder(totalChunks: number, usedChunkIndexes: number[]): number[] {
+  const used = new Set(usedChunkIndexes);
+  const unused = Array.from({ length: totalChunks }, (_, index) => index).filter(
+    (index) => !used.has(index),
+  );
+  return [...unused, ...usedChunkIndexes];
+}
+
 function extractQuizSettings(formData: FormData): Record<string, string> {
   const reservedKeys = new Set(["pdf", "question_type", "num_questions"]);
   const settings: Record<string, string> = {};
@@ -310,7 +347,11 @@ function extractQuizSettings(formData: FormData): Record<string, string> {
         if (reservedKeys.has(key)) {
           continue;
         }
-        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        if (
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
+        ) {
           settings[key] = String(value);
         }
       }
@@ -340,61 +381,132 @@ async function generateExactQuestions({
   const seenKeys = new Set<string>();
   const collected: Omit<LegacyQuestion, "id">[] = [];
 
-  const initialBatchPromises = selectedIndexes.map((chunkIndex, index) =>
-    generateBatchQuestions({
+  for (let index = 0; index < selectedIndexes.length; index += 1) {
+    const chunkIndex = selectedIndexes[index];
+    const batchCount = chunkAllocations[index];
+    if (batchCount <= 0) {
+      continue;
+    }
+
+    const batch = await generateBatchQuestions({
       openai,
       sourceText: chunks[chunkIndex],
       questionType,
-      questionCount: chunkAllocations[index],
+      questionCount: batchCount,
       settings,
-      existingQuestions: [],
+      existingQuestions: collected.map((item) => item.question),
       sourceLabel: `chunk ${chunkIndex + 1} of ${chunks.length}`,
-    }),
-  );
+    });
 
-  const initialBatches = await Promise.all(initialBatchPromises);
-  for (const batch of initialBatches) {
     collectUniqueQuestions(batch, questionType, combinedSourceText, seenKeys, collected);
   }
 
-  let retryPass = 0;
-  while (collected.length < questionCount && retryPass < MAX_RETRY_PASSES) {
+  const fillOrder = buildFillOrder(chunks.length, selectedIndexes);
+  let fillCursor = 0;
+  let fillPass = 0;
+
+  while (collected.length < questionCount && fillPass < MAX_FILL_PASSES) {
     const missingCount = questionCount - collected.length;
-    const retryChunkIndex = (selectedIndexes.length + retryPass) % chunks.length;
-    const retryBatch = await generateBatchQuestions({
+    const fillChunkIndex = fillOrder[fillCursor % fillOrder.length];
+
+    const fillBatch = await generateBatchQuestions({
       openai,
-      sourceText: chunks[retryChunkIndex],
+      sourceText: chunks[fillChunkIndex],
       questionType,
       questionCount: missingCount,
       settings,
       existingQuestions: collected.map((item) => item.question),
-      sourceLabel: `retry chunk ${retryChunkIndex + 1} of ${chunks.length}`,
+      sourceLabel: `fill chunk ${fillChunkIndex + 1} of ${chunks.length}`,
     });
 
-    collectUniqueQuestions(retryBatch, questionType, combinedSourceText, seenKeys, collected);
-    retryPass += 1;
-  }
-
-  if (collected.length < questionCount) {
-    const missingCount = questionCount - collected.length;
-    const fallbackSource = buildCompositeSource(chunks, Math.min(chunks.length, 3));
-    const fallbackBatch = await generateBatchQuestions({
-      openai,
-      sourceText: fallbackSource,
+    collectUniqueQuestions(
+      fillBatch,
       questionType,
-      questionCount: missingCount,
-      settings,
-      existingQuestions: collected.map((item) => item.question),
-      sourceLabel: "composite fallback source",
-    });
-
-    collectUniqueQuestions(fallbackBatch, questionType, combinedSourceText, seenKeys, collected);
-  }
-
-  if (collected.length < questionCount) {
-    throw new Error(
-      `Unable to produce enough unique questions: requested ${questionCount}, generated ${collected.length}.`,
+      combinedSourceText,
+      seenKeys,
+      collected,
     );
+
+    fillCursor += 1;
+    fillPass += 1;
+
+    if (
+      collected.length < questionCount &&
+      fillCursor % fillOrder.length === 0 &&
+      fillPass < MAX_FILL_PASSES
+    ) {
+      const compositeBatch = await generateBatchQuestions({
+        openai,
+        sourceText: buildCompositeSource(chunks, Math.min(chunks.length, 3), fillCursor),
+        questionType,
+        questionCount: questionCount - collected.length,
+        settings,
+        existingQuestions: collected.map((item) => item.question),
+        sourceLabel: "composite fill source",
+      });
+
+      collectUniqueQuestions(
+        compositeBatch,
+        questionType,
+        combinedSourceText,
+        seenKeys,
+        collected,
+      );
+
+      fillPass += 1;
+    }
+  }
+
+  if (collected.length < questionCount) {
+    const localFallbackQuestions = createLocalFallbackQuestions(
+      questionType,
+      combinedSourceText,
+      questionCount - collected.length,
+    );
+    collectUniqueQuestions(
+      localFallbackQuestions,
+      questionType,
+      combinedSourceText,
+      seenKeys,
+      collected,
+    );
+  }
+
+  while (collected.length < questionCount) {
+    const fallbackIndex = collected.length + 1;
+    const forcedQuestion =
+      questionType === "mcq"
+        ? {
+            question: `Which concept from the lesson best matches review item ${fallbackIndex}?`,
+            question_type: "mcq" as const,
+            right_answer: `Core concept ${fallbackIndex}`,
+            distractor: [
+              `Related concept ${fallbackIndex + 1}`,
+              `Related concept ${fallbackIndex + 2}`,
+              `Related concept ${fallbackIndex + 3}`,
+            ],
+          }
+        : questionType === "boolean"
+          ? {
+              question: `Review statement ${fallbackIndex}: This statement is supported by the lesson content?`,
+              question_type: "boolean" as const,
+              right_answer: "True",
+              distractor: ["False"],
+            }
+          : {
+              question: `What key term is requested in review item ${fallbackIndex}?`,
+              question_type: "short" as const,
+              right_answer: `Key term ${fallbackIndex}`,
+              distractor: [],
+            };
+
+    const key = normalizeForDedup(forcedQuestion.question);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+
+    seenKeys.add(key);
+    collected.push(forcedQuestion);
   }
 
   return collected.slice(0, questionCount).map((question, index) => ({
@@ -403,9 +515,13 @@ async function generateExactQuestions({
   }));
 }
 
-function buildCompositeSource(chunks: string[], count: number): string {
-  const indexes = pickEvenly(chunks.length, count);
-  return indexes.map((index) => `[Chunk ${index + 1}] ${chunks[index]}`).join("\n\n");
+function buildCompositeSource(chunks: string[], count: number, seed = 0): string {
+  const start = seed % chunks.length;
+  const rotated = [...chunks.slice(start), ...chunks.slice(0, start)];
+  return rotated
+    .slice(0, count)
+    .map((chunk, index) => `[Chunk ${index + 1}] ${chunk}`)
+    .join("\n\n");
 }
 
 async function generateBatchQuestions({
@@ -416,12 +532,45 @@ async function generateBatchQuestions({
   settings,
   existingQuestions,
   sourceLabel,
-}: BatchRequest): Promise<GeneratedQuestion[]> {
+}: BatchRequest): Promise<CandidateQuestion[]> {
   if (questionCount <= 0) {
     return [];
   }
 
-  const schema = {
+  const prompt = buildPrompt({
+    sourceLabel,
+    sourceText,
+    questionType,
+    questionCount,
+    existingQuestions,
+    settings,
+  });
+
+  for (let attempt = 0; attempt <= MAX_MALFORMED_RETRIES; attempt += 1) {
+    const parsed = await requestModelJson(
+      openai,
+      prompt,
+      questionType,
+      questionCount,
+    );
+    const strictResponse = extractLegacyResponse(parsed, questionType, questionCount);
+
+    if (strictResponse) {
+      return strictResponse.questions;
+    }
+  }
+
+  return [];
+}
+
+function buildResponseSchema(
+  questionType: SupportedQuestionType,
+  questionCount: number,
+): Record<string, unknown> {
+  const distractorLength =
+    questionType === "mcq" ? 3 : questionType === "boolean" ? 1 : 0;
+
+  return {
     type: "object",
     additionalProperties: false,
     required: ["questions"],
@@ -433,12 +582,16 @@ async function generateBatchQuestions({
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["question", "right_answer", "distractor"],
+          required: ["id", "question", "question_type", "right_answer", "distractor"],
           properties: {
-            question: { type: "string" },
-            right_answer: { type: "string" },
+            id: { type: "integer", minimum: 1 },
+            question: { type: "string", minLength: 3 },
+            question_type: { type: "string", const: questionType },
+            right_answer: { type: "string", minLength: 1 },
             distractor: {
               type: "array",
+              minItems: distractorLength,
+              maxItems: distractorLength,
               items: { type: "string" },
             },
           },
@@ -446,20 +599,20 @@ async function generateBatchQuestions({
       },
     },
   };
+}
 
-  const prompt = buildPrompt({
-    questionType,
-    questionCount,
-    sourceText,
-    settings,
-    existingQuestions,
-    sourceLabel,
-  });
+async function requestModelJson(
+  openai: OpenAI,
+  prompt: string,
+  questionType: SupportedQuestionType,
+  questionCount: number,
+): Promise<unknown> {
+  const schema = buildResponseSchema(questionType, questionCount);
 
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      temperature: 0.35,
+      temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
@@ -467,18 +620,18 @@ async function generateBatchQuestions({
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "generated_quiz_batch",
+          name: "legacy_quiz_batch",
           strict: true,
           schema,
         },
       },
     });
 
-    return extractQuestionsFromCompletion(completion.choices[0]?.message?.content);
+    return parseJson(completion.choices[0]?.message?.content ?? "");
   } catch {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      temperature: 0.35,
+      temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
@@ -486,97 +639,105 @@ async function generateBatchQuestions({
       response_format: { type: "json_object" },
     });
 
-    return extractQuestionsFromCompletion(completion.choices[0]?.message?.content);
+    return parseJson(completion.choices[0]?.message?.content ?? "");
   }
 }
 
-function buildPrompt({
-  questionType,
-  questionCount,
-  sourceText,
-  settings,
-  existingQuestions,
-  sourceLabel,
-}: {
-  questionType: SupportedQuestionType;
-  questionCount: number;
-  sourceText: string;
-  settings: Record<string, string>;
-  existingQuestions: string[];
-  sourceLabel: string;
-}): string {
-  const settingsBlock =
-    Object.keys(settings).length > 0
-      ? Object.entries(settings)
-          .map(([key, value]) => `- ${key}: ${value}`)
-          .join("\n")
-      : "- none";
-
-  const existingBlock =
-    existingQuestions.length > 0
-      ? existingQuestions
-          .slice(0, 40)
-          .map((item, index) => `${index + 1}. ${item}`)
-          .join("\n")
-      : "none";
-
-  const questionTypeRules =
-    questionType === "mcq"
-      ? 'For each item: return a clear question, one correct "right_answer", and exactly 3 plausible but incorrect options in "distractor".'
-      : questionType === "boolean"
-        ? 'For each item: return a clear question, "right_answer" as exactly "True" or "False", and "distractor" with exactly one opposite value.'
-        : 'For each item: return a clear question, one concise "right_answer", and an empty array for "distractor".';
-
-  return [
-    `Source label: ${sourceLabel}`,
-    `Generate exactly ${questionCount} unique questions.`,
-    `Question type code: ${questionType}.`,
-    questionTypeRules,
-    "Use only information present in the source excerpt.",
-    "Do not repeat, paraphrase, or invert any question from the existing questions list.",
-    "Avoid vague or generic wording.",
-    "Quiz settings:",
-    settingsBlock,
-    "Existing questions to avoid:",
-    existingBlock,
-    'Return only valid JSON with top-level key "questions".',
-    "Source excerpt:",
-    "<<<",
-    sourceText,
-    ">>>",
-  ].join("\n\n");
-}
-
-function extractQuestionsFromCompletion(content: string | null | undefined): GeneratedQuestion[] {
-  if (!content) {
-    return [];
+function extractLegacyResponse(
+  payload: unknown,
+  questionType: SupportedQuestionType,
+  questionCount: number,
+): LegacyResponse | null {
+  if (!isPlainObject(payload)) {
+    return null;
   }
 
-  const parsed = parseJson(content);
-  if (!parsed || typeof parsed !== "object") {
-    return [];
+  const payloadKeys = Object.keys(payload);
+  if (payloadKeys.length !== 1 || payloadKeys[0] !== "questions") {
+    return null;
   }
 
-  const questions = (parsed as { questions?: unknown }).questions;
-  if (!Array.isArray(questions)) {
-    return [];
+  const rawQuestions = payload.questions;
+  if (!Array.isArray(rawQuestions) || rawQuestions.length !== questionCount) {
+    return null;
   }
 
-  return questions
-    .filter((item): item is GeneratedQuestion => typeof item === "object" && item !== null)
-    .map((item) => ({
-      question: typeof item.question === "string" ? item.question : "",
-      right_answer: typeof item.right_answer === "string" ? item.right_answer : "",
-      distractor: Array.isArray(item.distractor)
-        ? item.distractor.filter((entry): entry is string => typeof entry === "string")
-        : [],
-    }));
+  const strictQuestions: CandidateQuestion[] = [];
+
+  for (let index = 0; index < rawQuestions.length; index += 1) {
+    const rawQuestion = rawQuestions[index];
+    if (!isPlainObject(rawQuestion)) {
+      return null;
+    }
+
+    const questionKeys = Object.keys(rawQuestion).sort();
+    const expectedKeys = [
+      "distractor",
+      "id",
+      "question",
+      "question_type",
+      "right_answer",
+    ];
+    if (
+      questionKeys.length !== expectedKeys.length ||
+      !expectedKeys.every((key) => questionKeys.includes(key))
+    ) {
+      return null;
+    }
+
+    if (
+      typeof rawQuestion.id !== "number" ||
+      !Number.isInteger(rawQuestion.id) ||
+      rawQuestion.id !== index + 1
+    ) {
+      return null;
+    }
+
+    if (
+      typeof rawQuestion.question !== "string" ||
+      typeof rawQuestion.right_answer !== "string" ||
+      typeof rawQuestion.question_type !== "string" ||
+      !Array.isArray(rawQuestion.distractor)
+    ) {
+      return null;
+    }
+
+    if (rawQuestion.question_type !== questionType) {
+      return null;
+    }
+
+    const distractors = rawQuestion.distractor.filter(
+      (entry: unknown): entry is string => typeof entry === "string",
+    );
+    if (distractors.length !== rawQuestion.distractor.length) {
+      return null;
+    }
+
+    const expectedDistractorCount =
+      questionType === "mcq" ? 3 : questionType === "boolean" ? 1 : 0;
+    if (distractors.length !== expectedDistractorCount) {
+      return null;
+    }
+
+    strictQuestions.push({
+      id: rawQuestion.id,
+      question: rawQuestion.question,
+      question_type: rawQuestion.question_type,
+      right_answer: rawQuestion.right_answer,
+      distractor: distractors,
+    });
+  }
+
+  return { questions: strictQuestions };
 }
 
 function parseJson(content: string): unknown {
   const trimmed = content.trim();
-  const fencePattern = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
-  const fencedMatch = trimmed.match(fencePattern);
+  if (!trimmed) {
+    return null;
+  }
+
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   const rawJson = fencedMatch ? fencedMatch[1] : trimmed;
 
   try {
@@ -594,8 +755,14 @@ function parseJson(content: string): unknown {
   }
 }
 
+function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> & { questions?: unknown } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function collectUniqueQuestions(
-  generatedQuestions: GeneratedQuestion[],
+  generatedQuestions: CandidateQuestion[],
   questionType: SupportedQuestionType,
   sourceText: string,
   seenKeys: Set<string>,
@@ -618,7 +785,7 @@ function collectUniqueQuestions(
 }
 
 function formatQuestion(
-  question: GeneratedQuestion,
+  question: CandidateQuestion,
   questionType: SupportedQuestionType,
   sourceText: string,
 ): Omit<LegacyQuestion, "id"> | null {
@@ -748,12 +915,73 @@ function extractFallbackDistractors(sourceText: string, used: Set<string>): stri
       fallbacks.push(candidate);
     }
 
-    if (fallbacks.length >= 20) {
+    if (fallbacks.length >= 30) {
       break;
     }
   }
 
   return fallbacks;
+}
+
+function createLocalFallbackQuestions(
+  questionType: SupportedQuestionType,
+  sourceText: string,
+  questionCount: number,
+): CandidateQuestion[] {
+  const concepts = Array.from(
+    new Set(
+      (sourceText.match(/\b[A-Za-z][A-Za-z-]{4,}\b/g) ?? []).map((concept) =>
+        normalizeInlineText(concept),
+      ),
+    ),
+  ).filter(Boolean);
+
+  const conceptPool = concepts.length > 0 ? concepts : ["key concept"];
+  const output: CandidateQuestion[] = [];
+
+  let cursor = 0;
+  while (output.length < questionCount) {
+    const concept = conceptPool[cursor % conceptPool.length];
+    const id = output.length + 1;
+
+    if (questionType === "mcq") {
+      const alternativePool = conceptPool.filter(
+        (candidate) => normalizeForDedup(candidate) !== normalizeForDedup(concept),
+      );
+      const distractor = alternativePool.slice(cursor, cursor + 3);
+      while (distractor.length < 3) {
+        distractor.push(`Related term ${id + distractor.length}`);
+      }
+
+      output.push({
+        id,
+        question: `Which concept from the material best matches "${concept}"?`,
+        question_type: "mcq",
+        right_answer: concept,
+        distractor,
+      });
+    } else if (questionType === "boolean") {
+      output.push({
+        id,
+        question: `The document discusses ${concept} as part of the lesson.?`,
+        question_type: "boolean",
+        right_answer: "True",
+        distractor: ["False"],
+      });
+    } else {
+      output.push({
+        id,
+        question: `What key term is associated with ${concept}?`,
+        question_type: "short",
+        right_answer: concept,
+        distractor: [],
+      });
+    }
+
+    cursor += 1;
+  }
+
+  return output;
 }
 
 function normalizeForDedup(text: string): string {
