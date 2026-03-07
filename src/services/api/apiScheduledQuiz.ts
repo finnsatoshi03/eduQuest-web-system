@@ -38,7 +38,7 @@ export async function getQuestionsForScheduledQuiz(
     const { data: questionsData } = await supabase
       .from("quiz_questions")
       .select(
-        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order",
+        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order, difficulty",
       )
       .eq("quiz_id", quizData.quiz_id)
       .order("order", { ascending: true });
@@ -679,8 +679,11 @@ export async function submitScheduledAnswer(
       let rightAns = 0;
       let wrongAns = 0;
 
-      allAnswers.forEach((answerData: any) => {
-        const points = answerData.quiz_questions?.points || 0;
+      allAnswers.forEach((answerData: {
+        is_correct: boolean;
+        quiz_questions?: { points?: number }[] | null;
+      }) => {
+        const points = answerData.quiz_questions?.[0]?.points || 0;
         if (answerData.is_correct) {
           totalScore += points;
           rightAns++;

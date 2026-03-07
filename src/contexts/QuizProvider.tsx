@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext } from "react";
 import { generateQuestions } from "@/services/api/apiQuiz";
+import { QuestionDifficulty } from "@/lib/types";
 import supabase from "@/services/supabase";
 import toast from "react-hot-toast";
 interface QuizProviderProps {
@@ -19,6 +20,17 @@ interface QuizContextType {
 }
 
 const QuizContext = createContext<QuizContextType | undefined>(undefined);
+const DIFFICULTY_SEQUENCE: QuestionDifficulty[] = ["easy", "medium", "hard"];
+
+function resolveDifficulty(
+  difficulty: unknown,
+  index: number,
+): QuestionDifficulty {
+  if (difficulty === "easy" || difficulty === "medium" || difficulty === "hard") {
+    return difficulty;
+  }
+  return DIFFICULTY_SEQUENCE[index % DIFFICULTY_SEQUENCE.length];
+}
 
 export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
   const [quizData, setQuizData] = useState<{
@@ -98,6 +110,10 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
                   points: 1,
                   distractor: distractors,
                   order: index + 1,
+                  difficulty: resolveDifficulty(
+                    (question as { difficulty?: unknown }).difficulty,
+                    index,
+                  ),
                 };
               })
             : [],

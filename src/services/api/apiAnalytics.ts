@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import supabase from "../supabase";
 
 export interface ProfessorOverallStats {
@@ -142,9 +141,11 @@ export async function getProfessorOverallStats(
  */
 export async function getQuizDetailedAnalytics(
   quizId: string,
-  _classCode: string,
+  classCode: string,
 ): Promise<QuizDetailedAnalytics | null> {
   try {
+    void classCode;
+
     // Get quiz details
     const { data: quiz, error: quizError } = await supabase
       .from("quiz")

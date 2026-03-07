@@ -5,7 +5,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, LucideIcon, RectangleEllipsis, Scale } from "lucide-react";
+import {
+  Check,
+  LucideIcon,
+  RectangleEllipsis,
+  Scale,
+  Shuffle,
+} from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuiz } from "@/contexts/QuizProvider";
 import { useMutation } from "@tanstack/react-query";
@@ -102,6 +108,17 @@ export default function QuizTypeModal({
         "Evaluate students' knowledge by having them identify key concepts, terms, or phrases. Ideal for testing comprehension and recall.",
       type: "short",
     },
+    ...(!hasQuestions
+      ? [
+          {
+            icon: Shuffle,
+            title: "Mixed (Random)",
+            description:
+              "Generate a random mix of multiple choice, true/false, and identification questions.",
+            type: "mixed",
+          },
+        ]
+      : []),
   ];
 
   const content = (

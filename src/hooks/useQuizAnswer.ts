@@ -64,9 +64,11 @@ export function useQuizAnswer({
             initialDelayMs: 500,
             exponentialBase: 2,
             onRetry: (attempt, error) => {
+              const retryErrorMessage =
+                error instanceof Error ? error.message : String(error);
               console.warn(
                 `⚠️ Answer submission failed (attempt ${attempt}/${maxRetries}):`,
-                error.message || error
+                retryErrorMessage
               );
             },
           }

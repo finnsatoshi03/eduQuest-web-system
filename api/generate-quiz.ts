@@ -128,22 +128,29 @@ const SHORT_QUESTION_REWRITE_PATTERNS = [
   /^(?:explain|describe)\b/i,
 ];
 
-type SupportedQuestionType = PromptQuestionType;
+type ConcreteQuestionType = PromptQuestionType;
+type SupportedQuestionType = ConcreteQuestionType | "mixed";
+type QuestionDifficulty = "easy" | "medium" | "hard";
+
+const DIFFICULTY_SEQUENCE: QuestionDifficulty[] = ["easy", "medium", "hard"];
+const MIXED_TYPES: ConcreteQuestionType[] = ["mcq", "boolean", "short"];
 
 interface LegacyQuestion {
   id: number;
   question: string;
-  question_type: SupportedQuestionType;
+  question_type: ConcreteQuestionType;
   right_answer: string;
   distractor: string[];
+  difficulty: QuestionDifficulty;
 }
 
 interface CandidateQuestion {
   id: number;
   question: string;
-  question_type: string;
+  question_type: ConcreteQuestionType;
   right_answer: string;
   distractor: string[];
+  difficulty?: string;
 }
 
 interface LegacyResponse {
@@ -153,7 +160,7 @@ interface LegacyResponse {
 interface BatchRequest {
   openai: OpenAI;
   sourceText: string;
-  questionType: SupportedQuestionType;
+  questionType: ConcreteQuestionType;
   questionCount: number;
   settings: Record<string, string>;
   existingQuestions: string[];
@@ -163,7 +170,7 @@ interface BatchRequest {
 interface GenerationRequest {
   openai: OpenAI;
   chunks: string[];
-  questionType: SupportedQuestionType;
+  questionType: ConcreteQuestionType;
   questionCount: number;
   settings: Record<string, string>;
 }
@@ -225,7 +232,7 @@ async function handleRequest(request: Request): Promise<Response> {
   );
   if (!questionType) {
     return jsonResponse(
-      { error: "Invalid question_type. Use mcq, boolean, or short." },
+      { error: "Invalid question_type. Use mcq, boolean, short, or mixed." },
       400,
     );
   }
@@ -270,13 +277,23 @@ async function handleRequest(request: Request): Promise<Response> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
-    const questions = await generateExactQuestions({
-      openai,
-      chunks,
-      questionType,
-      questionCount: requestedCount,
-      settings,
-    });
+    const rawQuestions =
+      questionType === "mixed"
+        ? await generateMixedQuestions({
+            openai,
+            chunks,
+            questionCount: requestedCount,
+            settings,
+          })
+        : await generateExactQuestions({
+            openai,
+            chunks,
+            questionType,
+            questionCount: requestedCount,
+            settings,
+          });
+
+    const questions = applySequentialDifficulty(rawQuestions);
     return jsonResponse({ questions }, 200);
   } catch (error) {
     console.error("Quiz generation error:", error);
@@ -312,6 +329,13 @@ function normalizeQuestionType(rawType: string): SupportedQuestionType | null {
     )
   ) {
     return "short";
+  }
+  if (
+    ["mixed", "mixed random", "mixed-random", "mixed question types"].includes(
+      normalized,
+    )
+  ) {
+    return "mixed";
   }
 
   return null;
@@ -488,6 +512,124 @@ function extractQuizSettings(formData: FormData): Record<string, string> {
   return settings;
 }
 
+function shuffleTypes(types: ConcreteQuestionType[]): ConcreteQuestionType[] {
+  const shuffled = [...types];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function buildMixedTypeSequence(questionCount: number): ConcreteQuestionType[] {
+  if (questionCount <= 0) {
+    return [];
+  }
+
+  const seeded = shuffleTypes(MIXED_TYPES).slice(
+    0,
+    Math.min(questionCount, MIXED_TYPES.length),
+  );
+
+  while (seeded.length < questionCount) {
+    const randomType = MIXED_TYPES[Math.floor(Math.random() * MIXED_TYPES.length)];
+    seeded.push(randomType);
+  }
+
+  return shuffleTypes(seeded);
+}
+
+async function generateMixedQuestions({
+  openai,
+  chunks,
+  questionCount,
+  settings,
+}: Omit<GenerationRequest, "questionType">): Promise<LegacyQuestion[]> {
+  const typeSequence = buildMixedTypeSequence(questionCount);
+  const typeCounts = typeSequence.reduce(
+    (acc, type) => {
+      acc[type] += 1;
+      return acc;
+    },
+    { mcq: 0, boolean: 0, short: 0 } as Record<ConcreteQuestionType, number>,
+  );
+
+  const pools: Record<ConcreteQuestionType, LegacyQuestion[]> = {
+    mcq: [],
+    boolean: [],
+    short: [],
+  };
+
+  for (const type of MIXED_TYPES) {
+    const count = typeCounts[type];
+    if (count <= 0) {
+      continue;
+    }
+
+    pools[type] = await generateExactQuestions({
+      openai,
+      chunks,
+      questionType: type,
+      questionCount: count,
+      settings,
+    });
+  }
+
+  const cursors: Record<ConcreteQuestionType, number> = {
+    mcq: 0,
+    boolean: 0,
+    short: 0,
+  };
+  const mixedQuestions: LegacyQuestion[] = [];
+
+  for (const type of typeSequence) {
+    const pool = pools[type];
+    const question = pool[cursors[type]];
+
+    if (question) {
+      cursors[type] += 1;
+      mixedQuestions.push(question);
+      continue;
+    }
+
+    const fallbackType = MIXED_TYPES.find(
+      (candidateType) => cursors[candidateType] < pools[candidateType].length,
+    );
+    if (!fallbackType) {
+      break;
+    }
+
+    mixedQuestions.push(pools[fallbackType][cursors[fallbackType]]);
+    cursors[fallbackType] += 1;
+  }
+
+  return mixedQuestions.slice(0, questionCount).map((question, index) => ({
+    ...question,
+    id: index + 1,
+  }));
+}
+
+function normalizeDifficulty(rawDifficulty: unknown): QuestionDifficulty {
+  if (typeof rawDifficulty !== "string") {
+    return "easy";
+  }
+
+  const normalized = rawDifficulty.trim().toLowerCase();
+  if (normalized === "easy" || normalized === "medium" || normalized === "hard") {
+    return normalized;
+  }
+
+  return "easy";
+}
+
+function applySequentialDifficulty(questions: LegacyQuestion[]): LegacyQuestion[] {
+  return questions.map((question, index) => ({
+    ...question,
+    id: index + 1,
+    difficulty: DIFFICULTY_SEQUENCE[index % DIFFICULTY_SEQUENCE.length],
+  }));
+}
+
 async function generateExactQuestions({
   openai,
   chunks,
@@ -610,6 +752,7 @@ async function generateExactQuestions({
               `Related concept ${fallbackIndex + 2}`,
               `Related concept ${fallbackIndex + 3}`,
             ],
+            difficulty: "easy" as const,
           }
         : questionType === "boolean"
           ? {
@@ -617,12 +760,14 @@ async function generateExactQuestions({
               question_type: "boolean" as const,
               right_answer: "True",
               distractor: ["False"],
+              difficulty: "easy" as const,
             }
           : {
               question: `What key term is requested in review item ${fallbackIndex}?`,
               question_type: "short" as const,
               right_answer: `Key term ${fallbackIndex}`,
               distractor: [],
+              difficulty: "easy" as const,
             };
 
     const key = normalizeForDedup(forcedQuestion.question);
@@ -689,7 +834,7 @@ async function generateBatchQuestions({
 }
 
 function buildResponseSchema(
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   questionCount: number,
 ): Record<string, unknown> {
   const distractorLength =
@@ -729,7 +874,7 @@ function buildResponseSchema(
 async function requestModelJson(
   openai: OpenAI,
   prompt: string,
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   questionCount: number,
 ): Promise<unknown> {
   const schema = buildResponseSchema(questionType, questionCount);
@@ -770,7 +915,7 @@ async function requestModelJson(
 
 function extractLegacyResponse(
   payload: unknown,
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   questionCount: number,
 ): LegacyResponse | null {
   if (!isPlainObject(payload)) {
@@ -796,16 +941,21 @@ function extractLegacyResponse(
     }
 
     const questionKeys = Object.keys(rawQuestion).sort();
-    const expectedKeys = [
+    const baseExpectedKeys = [
       "distractor",
       "id",
       "question",
       "question_type",
       "right_answer",
     ];
+    const extendedExpectedKeys = [...baseExpectedKeys, "difficulty"];
     if (
-      questionKeys.length !== expectedKeys.length ||
-      !expectedKeys.every((key) => questionKeys.includes(key))
+      !(
+        (questionKeys.length === baseExpectedKeys.length &&
+          baseExpectedKeys.every((key) => questionKeys.includes(key))) ||
+        (questionKeys.length === extendedExpectedKeys.length &&
+          extendedExpectedKeys.every((key) => questionKeys.includes(key)))
+      )
     ) {
       return null;
     }
@@ -847,9 +997,11 @@ function extractLegacyResponse(
     strictQuestions.push({
       id: rawQuestion.id,
       question: rawQuestion.question,
-      question_type: rawQuestion.question_type,
+      question_type: questionType,
       right_answer: rawQuestion.right_answer,
       distractor: distractors,
+      difficulty:
+        typeof rawQuestion.difficulty === "string" ? rawQuestion.difficulty : undefined,
     });
   }
 
@@ -888,7 +1040,7 @@ function isPlainObject(
 
 function collectUniqueQuestions(
   generatedQuestions: CandidateQuestion[],
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   sourceText: string,
   seenKeys: Set<string>,
   collected: Array<Omit<LegacyQuestion, "id">>,
@@ -911,11 +1063,12 @@ function collectUniqueQuestions(
 
 function formatQuestion(
   question: CandidateQuestion,
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   sourceText: string,
 ): Omit<LegacyQuestion, "id"> | null {
   const questionText = ensureQuestionMark(normalizeInlineText(question.question ?? ""));
   const rightAnswer = normalizeInlineText(question.right_answer ?? "");
+  const difficulty = normalizeDifficulty(question.difficulty);
 
   if (!questionText || !rightAnswer) {
     return null;
@@ -928,6 +1081,7 @@ function formatQuestion(
       question_type: "boolean",
       right_answer: normalizedAnswer,
       distractor: [normalizedAnswer === "True" ? "False" : "True"],
+      difficulty,
     };
   }
 
@@ -946,6 +1100,7 @@ function formatQuestion(
       question_type: "short",
       right_answer: normalizedShortAnswer,
       distractor: [],
+      difficulty,
     };
   }
 
@@ -960,6 +1115,7 @@ function formatQuestion(
     question_type: "mcq",
     right_answer: rightAnswer,
     distractor: normalizedDistractors,
+    difficulty,
   };
 }
 
@@ -1327,7 +1483,7 @@ function extractFallbackDistractors(sourceText: string, used: Set<string>): stri
 }
 
 function createLocalFallbackQuestions(
-  questionType: SupportedQuestionType,
+  questionType: ConcreteQuestionType,
   sourceText: string,
   questionCount: number,
 ): CandidateQuestion[] {
@@ -1362,6 +1518,7 @@ function createLocalFallbackQuestions(
         question_type: "mcq",
         right_answer: concept,
         distractor,
+        difficulty: "easy",
       });
     } else if (questionType === "boolean") {
       output.push({
@@ -1370,6 +1527,7 @@ function createLocalFallbackQuestions(
         question_type: "boolean",
         right_answer: "True",
         distractor: ["False"],
+        difficulty: "easy",
       });
     } else {
       output.push({
@@ -1378,6 +1536,7 @@ function createLocalFallbackQuestions(
         question_type: "short",
         right_answer: concept,
         distractor: [],
+        difficulty: "easy",
       });
     }
 

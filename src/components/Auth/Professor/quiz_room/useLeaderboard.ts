@@ -284,7 +284,7 @@ export function useLeaderboard(classId: string) {
               // Optimistic update - add to leaderboard or update if already exists
               setLeaderboardData((currentData: LeaderboardEntry[]) => {
                 const newEntry = payload.new as any;
-                let updatedData = [...currentData];
+                const updatedData = [...currentData];
 
                 // Check if student already exists (replace with finalized version)
                 const existingIndex = updatedData.findIndex(

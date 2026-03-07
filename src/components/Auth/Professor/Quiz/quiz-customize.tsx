@@ -3,6 +3,7 @@ import {
   deleteQuestion,
   duplicateQuestion,
   updateBulkPointsAndTime,
+  updateQuestionOrderAndDifficulty,
   updateQuestionOrder,
   updateSingleQuestion,
 } from "@/services/api/apiQuiz";
@@ -26,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { QuizQuestions } from "@/lib/types";
+import { QuestionDifficulty } from "@/lib/types";
 import { toast } from "react-hot-toast";
 import {
   Loader2,
@@ -40,6 +42,8 @@ import {
   Copy,
   Plus,
   AlertTriangle,
+  WandSparkles,
+  Info,
 } from "lucide-react";
 import { formatQuestionType, questionTypeIcon } from "@/lib/helpers";
 import { useQuizData } from "./useQuizData";
@@ -55,6 +59,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import QuizTypeModal from "./quiz-type-modal";
 import Loader from "@/components/Shared/Loader";
+import DifficultyBadge from "@/components/Shared/difficulty-badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+type SmartOrganizeMode = "sequential" | "grouped";
+
+const DIFFICULTY_SEQUENCE: QuestionDifficulty[] = ["easy", "medium", "hard"];
+const DIFFICULTY_WEIGHT: Record<QuestionDifficulty, number> = {
+  easy: 0,
+  medium: 1,
+  hard: 2,
+};
 
 const iconMapping = {
   Scale: Scale,
@@ -62,6 +82,26 @@ const iconMapping = {
   RectangleEllipsis: RectangleEllipsis,
   HelpCircle: HelpCircle,
 };
+
+function normalizeDifficulty(
+  difficulty: string | undefined,
+  index: number,
+): QuestionDifficulty {
+  if (difficulty === "easy" || difficulty === "medium" || difficulty === "hard") {
+    return difficulty;
+  }
+
+  return DIFFICULTY_SEQUENCE[index % DIFFICULTY_SEQUENCE.length];
+}
+
+function applySequentialDifficulty(
+  questions: QuizQuestions[],
+): Array<QuizQuestions & { difficulty: QuestionDifficulty }> {
+  return questions.map((question, index) => ({
+    ...question,
+    difficulty: DIFFICULTY_SEQUENCE[index % DIFFICULTY_SEQUENCE.length],
+  }));
+}
 
 export default function CustomizeQuiz() {
   const navigate = useNavigate();
@@ -73,6 +113,11 @@ export default function CustomizeQuiz() {
   const [customTime, setCustomTime] = useState<boolean>(false);
   const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
   const [questionTypeModalOpen, setQuestionTypeModalOpen] = useState(false);
+  const [smartOrganizeMode, setSmartOrganizeMode] =
+    useState<SmartOrganizeMode>("sequential");
+  const [lastOrganizeSnapshot, setLastOrganizeSnapshot] = useState<
+    QuizQuestions[] | null
+  >(null);
 
   const queryClient = useQueryClient();
 
@@ -84,7 +129,13 @@ export default function CustomizeQuiz() {
 
   useEffect(() => {
     if (quizQuestionsData && Array.isArray(quizQuestionsData)) {
-      setQuestions(quizQuestionsData.sort((a, b) => a.order - b.order));
+      const normalizedQuestions = quizQuestionsData
+        .sort((a, b) => a.order - b.order)
+        .map((question, index) => ({
+          ...question,
+          difficulty: normalizeDifficulty(question.difficulty, index),
+        }));
+      setQuestions(normalizedQuestions);
     } else {
       setQuestions([]);
     }
@@ -135,6 +186,25 @@ export default function CustomizeQuiz() {
       queryClient.invalidateQueries({ queryKey: ["quiz", quizId] });
     },
   });
+
+  const { mutate: updateQuestionOrganization, isPending: isOrganizing } =
+    useMutation({
+      mutationFn: (
+        updates: {
+          id: string;
+          order: number;
+          difficulty: QuestionDifficulty;
+        }[],
+      ) => updateQuestionOrderAndDifficulty(quizId!, updates),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
+        toast.success("Questions organized successfully");
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || "Failed to organize questions");
+        queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
+      },
+    });
 
   const deleteMutation = useMutation({
     mutationFn: (questionId: string) => deleteQuestion(questionId),
@@ -246,6 +316,57 @@ export default function CustomizeQuiz() {
     }
   };
 
+  const handleSmartOrganize = (mode: SmartOrganizeMode) => {
+    const sortedQuestions = [...questions].sort((a, b) => a.order - b.order);
+    const sequentialDifficulty = applySequentialDifficulty(sortedQuestions);
+
+    const organizedQuestions =
+      mode === "grouped"
+        ? [...sequentialDifficulty]
+            .sort((a, b) => {
+              const weightA = DIFFICULTY_WEIGHT[a.difficulty];
+              const weightB = DIFFICULTY_WEIGHT[b.difficulty];
+              if (weightA !== weightB) {
+                return weightA - weightB;
+              }
+              return a.order - b.order;
+            })
+            .map((question, index) => ({ ...question, order: index + 1 }))
+        : sequentialDifficulty.map((question, index) => ({
+            ...question,
+            order: index + 1,
+          }));
+
+    setLastOrganizeSnapshot(questions);
+    setQuestions(organizedQuestions);
+    updateQuestionOrganization(
+      organizedQuestions.map((question) => ({
+        id: question.quiz_question_id,
+        order: question.order,
+        difficulty: question.difficulty,
+      })),
+    );
+  };
+
+  const handleUndoOrganize = () => {
+    if (!lastOrganizeSnapshot) {
+      return;
+    }
+
+    const restoredQuestions = [...lastOrganizeSnapshot].sort(
+      (a, b) => a.order - b.order,
+    );
+    setQuestions(restoredQuestions);
+    updateQuestionOrganization(
+      restoredQuestions.map((question, index) => ({
+        id: question.quiz_question_id,
+        order: question.order || index + 1,
+        difficulty: normalizeDifficulty(question.difficulty, index),
+      })),
+    );
+    setLastOrganizeSnapshot(null);
+  };
+
   if (isPending) return <Loader />;
   if (isError) return <div>Error loading questions</div>;
 
@@ -343,6 +464,67 @@ export default function CustomizeQuiz() {
                 "Apply Bulk Update"
               )}
             </Button>
+
+            <div className="space-y-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-700">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold">Smart Organize</p>
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                      >
+                        <Info size={14} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Automatically organize questions by difficulty level.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Select
+                value={smartOrganizeMode}
+                onValueChange={(value: SmartOrganizeMode) =>
+                  setSmartOrganizeMode(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Organization mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="sequential">
+                      Default Sequential Order
+                    </SelectItem>
+                    <SelectItem value="grouped">
+                      Group by Difficulty
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1 gap-2"
+                  onClick={() => handleSmartOrganize(smartOrganizeMode)}
+                  disabled={questions.length === 0 || isOrganizing}
+                >
+                  <WandSparkles size={16} />
+                  {isOrganizing ? "Organizing..." : "Apply"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleUndoOrganize}
+                  disabled={!lastOrganizeSnapshot || isOrganizing}
+                >
+                  Undo
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex flex-col">
@@ -412,6 +594,7 @@ export default function CustomizeQuiz() {
                                           {formatQuestionType(q.question_type)}
                                         </p>
                                       </div>
+                                      <DifficultyBadge difficulty={q.difficulty} />
                                       <Select
                                         onValueChange={(value) =>
                                           updateSingle({

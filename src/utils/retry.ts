@@ -15,14 +15,14 @@ export interface RetryOptions {
   initialDelayMs?: number;
   maxDelayMs?: number;
   exponentialBase?: number;
-  onRetry?: (attempt: number, error: any) => void;
+  onRetry?: (attempt: number, error: unknown) => void;
 }
 
 export class RetryError extends Error {
   constructor(
     message: string,
     public readonly attempts: number,
-    public readonly lastError: any
+    public readonly lastError: unknown
   ) {
     super(message);
     this.name = "RetryError";
@@ -58,7 +58,7 @@ export async function retryWithBackoff<T>(
     onRetry,
   } = options;
 
-  let lastError: any;
+  let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -103,18 +103,31 @@ export async function retryWithBackoff<T>(
  * @param error - The error to check
  * @returns true if the error should be retried
  */
-export function isRetryableError(error: any): boolean {
+export function isRetryableError(error: unknown): boolean {
+  const errorMessage =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+  const errorStatus =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : NaN;
+  const errorCode =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+
   // Network errors
-  if (error?.message?.includes("fetch failed")) return true;
-  if (error?.message?.includes("network")) return true;
-  if (error?.message?.includes("timeout")) return true;
+  if (errorMessage.includes("fetch failed")) return true;
+  if (errorMessage.includes("network")) return true;
+  if (errorMessage.includes("timeout")) return true;
 
   // HTTP errors (5xx server errors are retryable, 4xx client errors are not)
-  if (error?.status >= 500 && error?.status < 600) return true;
+  if (errorStatus >= 500 && errorStatus < 600) return true;
 
   // Supabase specific errors
-  if (error?.code === "PGRST301") return true; // Connection timeout
-  if (error?.code === "PGRST504") return true; // Gateway timeout
+  if (errorCode === "PGRST301") return true; // Connection timeout
+  if (errorCode === "PGRST504") return true; // Gateway timeout
 
   return false;
 }

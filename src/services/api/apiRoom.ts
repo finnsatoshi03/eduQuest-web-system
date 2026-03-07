@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   LeaderboardEntry,
   Quiz,
@@ -360,7 +359,7 @@ export async function getQuestionsProf(
     const { data: questionsData } = await supabase
       .from("quiz_questions")
       .select(
-        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order",
+        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order, difficulty",
       )
       .eq("quiz_id", quizData.quiz_id)
       .order("order", { ascending: true });
@@ -688,7 +687,7 @@ export async function getQuizQuestionsStud(
     const { data: questionsData } = await supabase
       .from("quiz_questions")
       .select(
-        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order",
+        "quiz_question_id, right_answer, question, distractor, time, image_url, points, question_type, order, difficulty",
       )
       .eq("quiz_id", quizData.quiz_id)
       .order("order", { ascending: true });

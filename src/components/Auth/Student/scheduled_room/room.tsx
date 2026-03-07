@@ -608,6 +608,7 @@ const ScheduledQuizLobby: React.FC<ScheduledQuizLobbyProps> = ({
         <QuestionHeader
           questionNumber={currentQuestionIndex + 1}
           points={currentQuestion.points!}
+          difficulty={currentQuestion.difficulty}
         />
 
         {!isNoTimeQuiz && (

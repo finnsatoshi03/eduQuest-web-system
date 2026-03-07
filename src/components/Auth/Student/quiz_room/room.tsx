@@ -147,7 +147,7 @@ const SGameLobby: React.FC = () => {
 
       return gameEventHandler(classId, setGameStartWrapper);
     }
-  }, [classId, joined, initializeLeaderboard]);
+  }, [classId, joined, initializeLeaderboard, setGameStarted]);
 
   // Session validation effect - check for valid session_id when game starts
   useEffect(() => {
@@ -220,8 +220,9 @@ const SGameLobby: React.FC = () => {
       const nextQuestion = questions[currentQuestionIndex];
       setTimeLeft(nextQuestion.time);
     }
-  }, [showLeaderboard, gameStart]);
+  }, [showLeaderboard, gameStart, currentQuestionIndex, questions]);
 
+  // Intentionally avoid depending on handleTimeUp to prevent timer reset jitter.
   useEffect(() => {
     if (gameStart && timeLeft >= 0) {
       const interval = setInterval(() => {
@@ -235,7 +236,7 @@ const SGameLobby: React.FC = () => {
 
       return () => clearInterval(interval);
     }
-  }, [timeLeft, gameStart]);
+  }, [timeLeft, gameStart]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resetter for next question
   useEffect(() => {
@@ -381,11 +382,11 @@ const SGameLobby: React.FC = () => {
         timeTaken: timeTaken > 0 ? timeTaken : 0,
       });
       setSessionError(null); // Clear any previous errors
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Failed to submit answer:", error);
 
       // Check if it's a session error
-      if (error.message?.includes("session")) {
+      if (error instanceof Error && error.message.includes("session")) {
         setSessionError("Failed to submit: No active quiz session. Contact the professor.");
         setSessionReady(false);
       } else {
@@ -544,6 +545,7 @@ const SGameLobby: React.FC = () => {
         <QuestionHeader
           questionNumber={currentQuestionIndex + 1}
           points={currentQuestion.points!}
+          difficulty={currentQuestion.difficulty}
         />
 
         <div className="mb-4 w-full">

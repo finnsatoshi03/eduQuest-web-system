@@ -39,6 +39,8 @@ export interface Quiz {
   shuffle?: boolean;
 }
 
+export type QuestionDifficulty = "easy" | "medium" | "hard";
+
 export interface QuizQuestions {
   quiz_question_id: string;
   quiz_id: string;
@@ -50,6 +52,7 @@ export interface QuizQuestions {
   points?: number;
   question_type: string;
   order: number;
+  difficulty?: QuestionDifficulty;
 }
 
 export interface LeaderboardEntry {
@@ -73,6 +76,7 @@ export interface TempQuizQuestionPayload {
   points: number;
   question_type: string;
   order: number;
+  difficulty?: QuestionDifficulty;
   start_time: string;
   end_time: string;
 }

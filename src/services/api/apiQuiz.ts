@@ -4,7 +4,7 @@ import supabase from "../supabase";
 import { v4 as uuidv4 } from "uuid";
 import { qgen } from "./apiUrl";
 import axios from "axios";
-import { Quiz, QuizQuestions } from "@/lib/types";
+import { QuestionDifficulty, Quiz, QuizQuestions } from "@/lib/types";
 import { QUIZ_STATUS, QuizStatus } from "@/lib/constants/quizStatus";
 
 export async function createQuiz(ownerId: string): Promise<Quiz | null> {
@@ -244,6 +244,7 @@ export async function cloneQuiz(
         points: q.points,
         question_type: q.question_type,
         order: q.order,
+        difficulty: q.difficulty,
       }));
 
       const { error: questionsError } = await supabase
@@ -369,12 +370,14 @@ export async function updateSingleQuestion(
   questionId: string,
   points?: string,
   time?: string,
+  difficulty?: QuestionDifficulty,
 ): Promise<QuizQuestions | null> {
   const { data, error } = await supabase
     .from("quiz_questions")
     .update({
       points: points ? parseInt(points) : undefined,
       time: time ? parseInt(time) : undefined,
+      difficulty,
     })
     .eq("quiz_id", quizId)
     .eq("quiz_question_id", questionId)
@@ -408,6 +411,36 @@ export async function updateQuestionOrder(
   return results.map((result) => result.data).flat();
 }
 
+export async function updateQuestionOrderAndDifficulty(
+  quizId: string,
+  updates: {
+    id: string;
+    order: number;
+    difficulty: QuestionDifficulty;
+  }[],
+) {
+  const requests = updates.map((item) =>
+    supabase
+      .from("quiz_questions")
+      .update({
+        order: item.order,
+        difficulty: item.difficulty,
+      })
+      .eq("quiz_question_id", item.id)
+      .eq("quiz_id", quizId),
+  );
+
+  const results = await Promise.all(requests);
+  const errors = results.filter((result) => result.error);
+
+  if (errors.length > 0) {
+    console.error("Errors updating order/difficulty:", errors);
+    throw new Error("Failed to update question organization");
+  }
+
+  return results.map((result) => result.data).flat();
+}
+
 export async function createQuestion(quizId: string, questionType: string) {
   // First, get the current maximum order for the quiz
   const { data: maxOrderData, error: maxOrderError } = await supabase
@@ -436,6 +469,7 @@ export async function createQuestion(quizId: string, questionType: string) {
       points: 1,
       time: 30,
       order: newOrder,
+      difficulty: "easy",
     })
     .select()
     .single();
@@ -578,6 +612,7 @@ export async function updateQuizAndQuestions(
         points: question.points,
         question_type: question.question_type,
         order: question.order,
+        difficulty: question.difficulty,
       };
 
       // Remove any undefined values

@@ -23,6 +23,7 @@ import { useTheme } from "@/contexts/ThemeProvider";
 import { useMediaQuery } from "react-responsive";
 import Loader from "@/components/Shared/Loader";
 import { GAME_COLORS } from "@/lib/constants";
+import DifficultyBadge from "@/components/Shared/difficulty-badge";
 
 interface QuizPreviewDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ interface QuizQuestions {
   question_type: string;
   points: number;
   time: number;
+  difficulty?: string;
 }
 
 const iconMapping = {
@@ -207,15 +209,18 @@ const QuizPreviewDialog = ({ open, onOpenChange }: QuizPreviewDialogProps) => {
                   Question {currentQuestionIndex + 1} of{" "}
                   {completeQuestions.length}
                 </span>
-                <p className="flex items-center gap-1 rounded bg-blue-300 bg-opacity-40 px-3 py-0.5 text-xs">
-                  {React.createElement(
-                    iconMapping[
-                      questionTypeIcon(currentQuestion.question_type)
-                    ],
-                    { size: 12 },
-                  )}{" "}
-                  {formatQuestionType(currentQuestion.question_type)}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="flex items-center gap-1 rounded bg-blue-300 bg-opacity-40 px-3 py-0.5 text-xs">
+                    {React.createElement(
+                      iconMapping[
+                        questionTypeIcon(currentQuestion.question_type)
+                      ],
+                      { size: 12 },
+                    )}{" "}
+                    {formatQuestionType(currentQuestion.question_type)}
+                  </p>
+                  <DifficultyBadge difficulty={currentQuestion.difficulty} />
+                </div>
                 <p className="rounded border px-3 py-0.5 text-xs">
                   {currentQuestion.points} point
                   {currentQuestion.points !== 1 && "s"}

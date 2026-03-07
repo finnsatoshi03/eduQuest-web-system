@@ -52,6 +52,7 @@ CREATE TABLE public.quiz_questions (
   distractor ARRAY,
   points real,
   question_type text,
+  difficulty text,
   order integer,
   CONSTRAINT quiz_questions_pkey PRIMARY KEY (quiz_question_id),
   CONSTRAINT quiz_questions_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quiz(quiz_id)
@@ -108,6 +109,7 @@ CREATE TABLE public.temp_room_questions (
   distractor ARRAY,
   points real,
   question_type text,
+  difficulty text,
   order integer,
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   start_time timestamp with time zone,

@@ -42,6 +42,8 @@ export function formatQuestionType(type: string) {
       return "Multiple Choice";
     case "short":
       return "Fill in the Blank";
+    case "mixed":
+      return "Mixed";
     default:
       return type;
   }
@@ -68,14 +70,17 @@ export function questionTypeIcon(type: string) {
       return "Check";
     case "short":
       return "RectangleEllipsis";
+    case "mixed":
+      return "HelpCircle";
     default:
       return "HelpCircle";
   }
 }
 
 export function getLoadingStates(questionType: string) {
-  switch (questionType) {
+  switch (questionType.toLowerCase()) {
     case "multiple-choice":
+    case "mcq":
       return [
         { text: "Initializing quiz setup..." },
         { text: "Loading question templates..." },
@@ -88,6 +93,7 @@ export function getLoadingStates(questionType: string) {
         { text: "Almost done! Wrapping up..." },
       ];
     case "true-false":
+    case "boolean":
       return [
         { text: "Initializing quiz setup..." },
         { text: "Loading question templates..." },
@@ -99,6 +105,7 @@ export function getLoadingStates(questionType: string) {
         { text: "Almost done! Wrapping up..." },
       ];
     case "identification":
+    case "short":
       return [
         { text: "Initializing quiz setup..." },
         { text: "Loading question templates..." },
@@ -106,6 +113,17 @@ export function getLoadingStates(questionType: string) {
         { text: "Generating question prompts..." },
         { text: "Reviewing identification questions..." },
         { text: "Finalizing quiz data..." },
+        { text: "Almost done! Wrapping up..." },
+      ];
+    case "mixed":
+      return [
+        { text: "Initializing mixed quiz setup..." },
+        { text: "Splitting content into concept chunks..." },
+        { text: "Generating multiple-choice questions..." },
+        { text: "Generating true/false questions..." },
+        { text: "Generating identification questions..." },
+        { text: "Balancing difficulty sequence..." },
+        { text: "Merging and organizing all question types..." },
         { text: "Almost done! Wrapping up..." },
       ];
     default:
