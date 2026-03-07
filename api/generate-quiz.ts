@@ -1,5 +1,9 @@
 import OpenAI from "openai";
-import { PDFParse } from "pdf-parse";
+import type {
+  IncomingHttpHeaders,
+  IncomingMessage,
+  ServerResponse,
+} from "node:http";
 import { buildPrompt, type PromptQuestionType } from "../lib/buildPrompt.js";
 
 export const config = {
@@ -59,7 +63,23 @@ interface GenerationRequest {
 const SYSTEM_PROMPT =
   "You create high-quality classroom quiz questions. Follow every instruction exactly and output JSON only.";
 
-export default async function handler(request: Request): Promise<Response> {
+type NodeApiRequest = IncomingMessage & {
+  body?: unknown;
+  method?: string;
+  url?: string;
+  headers: IncomingHttpHeaders;
+};
+
+export default async function handler(
+  req: NodeApiRequest,
+  res: ServerResponse,
+): Promise<void> {
+  const request = await toWebRequest(req);
+  const response = await handleRequest(request);
+  await sendWebResponse(response, res);
+}
+
+async function handleRequest(request: Request): Promise<Response> {
   console.log("generate-quiz endpoint hit", {
     method: request.method,
     path: "/api/generate-quiz",
@@ -121,13 +141,10 @@ export default async function handler(request: Request): Promise<Response> {
   let extractedText = "";
   try {
     const pdfBuffer = Buffer.from(await uploadedFile.arrayBuffer());
-    const parser = new PDFParse({ data: pdfBuffer });
-    try {
-      const parsedPdf = await parser.getText();
-      extractedText = cleanExtractedText(parsedPdf.text ?? "");
-    } finally {
-      await parser.destroy();
-    }
+    const pdfModule = await import("pdf-parse/lib/pdf-parse.js");
+    const pdfParse = pdfModule.default as (buffer: Buffer) => Promise<{ text?: string }>;
+    const parsedPdf = await pdfParse(pdfBuffer);
+    extractedText = cleanExtractedText(parsedPdf.text ?? "");
   } catch (error) {
     console.error("PDF extraction error:", error);
     return jsonResponse({ error: "Failed to read PDF file" }, 400);
@@ -990,6 +1007,82 @@ function normalizeForDedup(text: string): string {
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function toWebRequest(req: NodeApiRequest): Promise<Request> {
+  const method = (req.method ?? "GET").toUpperCase();
+  const headers = toWebHeaders(req.headers);
+  const host =
+    headers.get("x-forwarded-host") ?? headers.get("host") ?? "localhost";
+  const protocol = headers.get("x-forwarded-proto") ?? "https";
+  const requestUrl = `${protocol}://${host}${req.url ?? "/"}`;
+
+  if (method === "GET" || method === "HEAD") {
+    return new Request(requestUrl, { method, headers });
+  }
+
+  const body = await readRawBody(req);
+  const requestBody = body.byteLength > 0 ? new Uint8Array(body) : undefined;
+  return new Request(requestUrl, { method, headers, body: requestBody });
+}
+
+function toWebHeaders(headers: IncomingHttpHeaders): Headers {
+  const webHeaders = new Headers();
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        webHeaders.append(key, item);
+      }
+      continue;
+    }
+
+    if (typeof value === "string") {
+      webHeaders.set(key, value);
+    }
+  }
+
+  return webHeaders;
+}
+
+async function readRawBody(req: NodeApiRequest): Promise<Buffer> {
+  if (req.body !== undefined && req.body !== null) {
+    if (Buffer.isBuffer(req.body)) {
+      return req.body;
+    }
+
+    if (req.body instanceof Uint8Array) {
+      return Buffer.from(req.body);
+    }
+
+    if (typeof req.body === "string") {
+      return Buffer.from(req.body);
+    }
+
+    if (typeof req.body === "object") {
+      return Buffer.from(JSON.stringify(req.body));
+    }
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function sendWebResponse(
+  response: Response,
+  res: ServerResponse,
+): Promise<void> {
+  res.statusCode = response.status;
+  response.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
+
+  const body = Buffer.from(await response.arrayBuffer());
+  res.end(body);
 }
 
 function jsonResponse(payload: Record<string, unknown>, status: number): Response {

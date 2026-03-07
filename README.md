@@ -64,7 +64,9 @@ npm install
 # OPENAI_API_KEY=your_openai_api_key
 # OPENAI_QUIZ_MODEL=gpt-4.1-mini
 # VITE_QUIZ_GENERATOR_URL=/api/generate-quiz
-# VITE_LOCAL_API_TARGET=http://localhost:3000
+
+# Optional: only if you run `npm run dev` (Vite-only) and want /api proxied elsewhere
+# VITE_LOCAL_API_TARGET=https://your-api-host
 
 # Login once to Vercel CLI
 vercel login
@@ -78,6 +80,7 @@ npm run dev:vercel
 - `npm run dev` - Start Vite only (no `/api` functions)
 - `npm run dev:vercel` - Start Vercel local runtime (frontend + `/api` functions)
 - `npm run dev:vite` - Alias for Vite only
+- `npm run check:serverless` - Smoke-check `/api/health` and `/api/generate-quiz` status codes
 - `npm run build` - Build for production
 - `npm run lint` - Run ESLint to check code quality
 - `npm run preview` - Preview the production build locally
@@ -88,9 +91,17 @@ With `npm run dev:vercel` running, this should return `405 Method not allowed` (
 
 ```bash
 curl -i http://localhost:3000/api/generate-quiz
+npm run check:serverless
 ```
 
-If you open the Vite URL (`http://localhost:5173`) during local development, `/api/*` requests are proxied to `http://localhost:3000` automatically via Vite proxy config.
+If you run `npm run dev` (Vite-only), set `VITE_LOCAL_API_TARGET` to enable `/api/*` proxying. With `npm run dev:vercel`, this is not required.
+
+For protected Vercel preview deployments, use authenticated checks:
+
+```bash
+npx vercel curl /api/health --deployment https://<your-preview>.vercel.app
+npx vercel curl /api/generate-quiz --deployment https://<your-preview>.vercel.app
+```
 
 ## 📄 License
 

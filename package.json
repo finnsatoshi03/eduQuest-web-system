@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:vite": "vite",
     "dev:vercel": "vercel dev --listen 3000",
+    "check:serverless": "node scripts/check-serverless.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -40,7 +41,7 @@
     "framer-motion": "^11.5.4",
     "lucide-react": "^0.441.0",
     "openai": "^6.27.0",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
     "react": "^18.3.1",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.3.1",

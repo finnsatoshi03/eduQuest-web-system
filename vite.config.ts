@@ -1,23 +1,26 @@
 import path from "path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
-const localApiProxyTarget =
-  process.env.VITE_LOCAL_API_TARGET || "http://localhost:3000";
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const localApiProxyTarget = env.VITE_LOCAL_API_TARGET?.trim();
+  const localProxy = localApiProxyTarget
+    ? {
+        "/api": {
+          target: localApiProxyTarget,
+          changeOrigin: true,
+        },
+      }
+    : undefined;
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      "/api": {
-        target: localApiProxyTarget,
-        changeOrigin: true,
+  return {
+    plugins: [react()],
+    server: localProxy ? { proxy: localProxy } : undefined,
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
       },
     },
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
+  };
 });
