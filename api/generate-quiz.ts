@@ -19,6 +19,114 @@ const CHUNK_MAX_TOKENS = 1200;
 const MAX_INITIAL_CHUNKS = 4;
 const MAX_FILL_PASSES = 6;
 const MAX_MALFORMED_RETRIES = 2;
+const SHORT_ANSWER_MAX_WORDS = 3;
+const SHORT_ANSWER_MAX_SOURCE_TOKENS = 1600;
+const SHORT_ANSWER_LEADING_ARTICLES = new Set(["a", "an", "the"]);
+const SHORT_ANSWER_INVALID_STARTS = new Set([
+  ...SHORT_ANSWER_LEADING_ARTICLES,
+  "to",
+  "for",
+  "in",
+  "on",
+  "at",
+  "by",
+  "with",
+  "without",
+  "because",
+  "since",
+  "while",
+  "that",
+  "this",
+  "these",
+  "those",
+  "it",
+  "its",
+  "they",
+  "them",
+  "there",
+  "take",
+  "takes",
+  "using",
+  "used",
+  "use",
+  "make",
+  "makes",
+  "improve",
+  "improves",
+]);
+const SHORT_ANSWER_STOP_WORDS = new Set([
+  ...SHORT_ANSWER_INVALID_STARTS,
+  "and",
+  "or",
+  "but",
+  "if",
+  "as",
+  "of",
+  "from",
+  "into",
+  "within",
+  "over",
+  "under",
+  "after",
+  "before",
+  "during",
+  "what",
+  "which",
+  "who",
+  "whom",
+  "when",
+  "where",
+  "why",
+  "how",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "being",
+  "been",
+  "can",
+  "could",
+  "should",
+  "would",
+  "do",
+  "does",
+  "did",
+  "purpose",
+  "function",
+  "role",
+  "section",
+  "lesson",
+  "plan",
+  "material",
+  "document",
+  "text",
+  "notes",
+  "note",
+  "answer",
+  "completed",
+]);
+const SHORT_ANSWER_BREAK_WORDS = new Set([
+  "because",
+  "since",
+  "that",
+  "which",
+  "who",
+  "whom",
+  "when",
+  "where",
+  "after",
+  "before",
+  "while",
+  "although",
+  "though",
+  "therefore",
+  "thus",
+]);
+const SHORT_QUESTION_REWRITE_PATTERNS = [
+  /^(?:what is|what's)\s+the\s+(?:purpose|function|role)\s+of\b/i,
+  /^(?:explain|describe)\b/i,
+];
 
 type SupportedQuestionType = PromptQuestionType;
 
@@ -824,10 +932,19 @@ function formatQuestion(
   }
 
   if (questionType === "short") {
+    const normalizedShortAnswer = normalizeShortAnswer(
+      rightAnswer,
+      questionText,
+      sourceText,
+    );
+    if (!normalizedShortAnswer) {
+      return null;
+    }
+
     return {
-      question: questionText,
+      question: normalizeShortQuestion(questionText),
       question_type: "short",
-      right_answer: rightAnswer,
+      right_answer: normalizedShortAnswer,
       distractor: [],
     };
   }
@@ -873,6 +990,275 @@ function normalizeBooleanAnswer(answer: string): "True" | "False" {
   }
 
   return /\b(not|never|incorrect|false)\b/i.test(value) ? "False" : "True";
+}
+
+function normalizeShortQuestion(questionText: string): string {
+  const stem = normalizeInlineText(questionText).replace(/[?]+$/g, "").trim();
+  if (!stem) {
+    return "Which term matches the source material?";
+  }
+
+  const shouldRewrite = SHORT_QUESTION_REWRITE_PATTERNS.some((pattern) =>
+    pattern.test(stem),
+  );
+  if (!shouldRewrite) {
+    return ensureQuestionMark(stem);
+  }
+
+  const purposeMatch = stem.match(
+    /^(?:what is|what's)\s+the\s+(?:purpose|function|role)\s+of\s+(.+)$/i,
+  );
+  if (purposeMatch?.[1]) {
+    return ensureQuestionMark(`Which term describes ${purposeMatch[1].trim()}`);
+  }
+
+  const directiveTarget = stem.replace(/^(?:explain|describe)\s*/i, "").trim();
+  if (directiveTarget) {
+    return ensureQuestionMark(`Which term best matches ${directiveTarget}`);
+  }
+
+  return ensureQuestionMark(stem);
+}
+
+function normalizeShortAnswer(
+  answer: string,
+  questionText: string,
+  sourceText: string,
+): string {
+  const cleaned = normalizeInlineText(answer)
+    .replace(/^["'`([{]+|["'`)\]}]+$/g, "")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const direct = finalizeShortAnswerCandidate(cleaned);
+  if (isValidShortAnswer(direct)) {
+    return direct;
+  }
+
+  const extractedFromSource = finalizeShortAnswerCandidate(
+    extractSourceAlignedShortTerm(`${questionText} ${cleaned}`, sourceText),
+  );
+  if (isValidShortAnswer(extractedFromSource)) {
+    return extractedFromSource;
+  }
+
+  const compactFromAnswer = finalizeShortAnswerCandidate(
+    extractCompactPhraseFromAnswer(cleaned),
+  );
+  if (isValidShortAnswer(compactFromAnswer)) {
+    return compactFromAnswer;
+  }
+
+  const fallback = finalizeShortAnswerCandidate(
+    coerceFallbackShortAnswer(
+      extractedFromSource || compactFromAnswer || direct || cleaned,
+    ),
+  );
+  return isValidShortAnswer(fallback) ? fallback : "";
+}
+
+function finalizeShortAnswerCandidate(candidate: string): string {
+  let value = normalizeInlineText(candidate)
+    .replace(/^answer\s*[:-]\s*/i, "")
+    .replace(/^(?:it is|it's|this is|that is|there is|there are)\s+/i, "")
+    .replace(/[,:;]+$/g, "")
+    .trim();
+
+  value = stripLeadingArticles(value);
+  if (!value) {
+    return "";
+  }
+
+  const words = value.split(/\s+/).filter(Boolean);
+  const breakIndex = words.findIndex((word, index) => {
+    if (index === 0) {
+      return false;
+    }
+    return SHORT_ANSWER_BREAK_WORDS.has(word.toLowerCase());
+  });
+
+  const limitedWords =
+    breakIndex > -1
+      ? words.slice(0, breakIndex)
+      : words.slice(0, SHORT_ANSWER_MAX_WORDS);
+
+  return limitedWords.join(" ").trim();
+}
+
+function stripLeadingArticles(text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  while (
+    words.length > 0 &&
+    SHORT_ANSWER_LEADING_ARTICLES.has(words[0].toLowerCase())
+  ) {
+    words.shift();
+  }
+  return words.join(" ");
+}
+
+function isValidShortAnswer(answer: string): boolean {
+  if (!answer || /[.!?]/.test(answer)) {
+    return false;
+  }
+
+  const words = answer.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > SHORT_ANSWER_MAX_WORDS) {
+    return false;
+  }
+
+  const firstWord = words[0].toLowerCase();
+  if (SHORT_ANSWER_INVALID_STARTS.has(firstWord)) {
+    return false;
+  }
+
+  if (words.some((word) => SHORT_ANSWER_BREAK_WORDS.has(word.toLowerCase()))) {
+    return false;
+  }
+
+  return words.some((word) => {
+    const normalizedWord = word.toLowerCase();
+    return (
+      !SHORT_ANSWER_STOP_WORDS.has(normalizedWord) &&
+      (normalizedWord.length >= 3 || /^\d+$/.test(normalizedWord))
+    );
+  });
+}
+
+function extractCompactPhraseFromAnswer(answer: string): string {
+  const firstClause = answer
+    .split(/[;:()]/)[0]
+    .split(
+      /\b(?:because|since|that|which|who|whom|when|where|after|before|while|although|though)\b/i,
+    )[0]
+    .trim();
+
+  const tokens = tokenizeWords(firstClause);
+  if (tokens.length === 0) {
+    return "";
+  }
+
+  const compactTokens = tokens.filter(
+    (token) => !SHORT_ANSWER_STOP_WORDS.has(token.toLowerCase()),
+  );
+  const selected =
+    compactTokens.length > 0 ? compactTokens : tokens.slice(0, SHORT_ANSWER_MAX_WORDS);
+  return selected.slice(0, SHORT_ANSWER_MAX_WORDS).join(" ");
+}
+
+function coerceFallbackShortAnswer(answer: string): string {
+  const tokens = tokenizeWords(answer).filter((token) => {
+    const normalized = token.toLowerCase();
+    return (
+      !SHORT_ANSWER_STOP_WORDS.has(normalized) &&
+      !SHORT_ANSWER_INVALID_STARTS.has(normalized)
+    );
+  });
+
+  if (tokens.length === 0) {
+    return "";
+  }
+
+  return tokens.slice(0, SHORT_ANSWER_MAX_WORDS).join(" ");
+}
+
+function extractSourceAlignedShortTerm(context: string, sourceText: string): string {
+  const contextTokens = tokenizeWords(context)
+    .map((token) => token.toLowerCase())
+    .filter((token) => !SHORT_ANSWER_STOP_WORDS.has(token));
+
+  if (contextTokens.length === 0) {
+    return "";
+  }
+
+  const sourceTokens = tokenizeWords(sourceText).slice(0, SHORT_ANSWER_MAX_SOURCE_TOKENS);
+  if (sourceTokens.length === 0) {
+    return "";
+  }
+
+  const contextSet = new Set(contextTokens);
+  const seen = new Set<string>();
+  let bestCandidate = "";
+  let bestScore = 0;
+  let bestWordCount = 0;
+
+  for (let index = 0; index < sourceTokens.length; index += 1) {
+    for (let size = SHORT_ANSWER_MAX_WORDS; size >= 1; size -= 1) {
+      if (index + size > sourceTokens.length) {
+        continue;
+      }
+
+      const candidateTokens = sourceTokens.slice(index, index + size);
+      if (!isUsableShortTermTokens(candidateTokens)) {
+        continue;
+      }
+
+      const candidate = candidateTokens.join(" ");
+      const key = normalizeForDedup(candidate);
+      if (!key || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      const score = scoreShortTermCandidate(candidateTokens, contextSet);
+      if (score <= 0) {
+        continue;
+      }
+
+      if (score > bestScore || (score === bestScore && size > bestWordCount)) {
+        bestCandidate = candidate;
+        bestScore = score;
+        bestWordCount = size;
+      }
+    }
+  }
+
+  return bestCandidate;
+}
+
+function isUsableShortTermTokens(tokens: string[]): boolean {
+  if (tokens.length === 0 || tokens.length > SHORT_ANSWER_MAX_WORDS) {
+    return false;
+  }
+
+  if (SHORT_ANSWER_LEADING_ARTICLES.has(tokens[0].toLowerCase())) {
+    return false;
+  }
+
+  return tokens.some((token) => {
+    const normalized = token.toLowerCase();
+    return (
+      !SHORT_ANSWER_STOP_WORDS.has(normalized) &&
+      (normalized.length >= 3 || /^\d+$/.test(normalized))
+    );
+  });
+}
+
+function scoreShortTermCandidate(tokens: string[], contextSet: Set<string>): number {
+  let overlapScore = 0;
+  let stopWordPenalty = 0;
+
+  for (const token of tokens) {
+    const normalized = token.toLowerCase();
+    if (contextSet.has(normalized)) {
+      overlapScore += 3;
+    }
+    if (SHORT_ANSWER_STOP_WORDS.has(normalized)) {
+      stopWordPenalty += 1;
+    }
+  }
+
+  if (overlapScore === 0) {
+    return 0;
+  }
+
+  return overlapScore - stopWordPenalty;
+}
+
+function tokenizeWords(text: string): string[] {
+  return normalizeInlineText(text).match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g) ?? [];
 }
 
 function normalizeMcqDistractors(

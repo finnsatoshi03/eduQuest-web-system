@@ -95,5 +95,13 @@ function getQuestionTypeRules(questionType: PromptQuestionType): string {
   if (questionType === "boolean") {
     return '- For each item, use question_type "boolean", right_answer as "True" or "False", and distractor as exactly one opposite value.';
   }
-  return '- For each item, use question_type "short" and distractor as an empty array.';
+  return [
+    '- For each item, use question_type "short" and distractor as an empty array.',
+    '- For identification questions (question_type = "short"), right_answer must be ONE word or a short term (max 3 words).',
+    '- Do NOT return explanations, definitions, or full-sentence right_answer values.',
+    '- right_answer must be a concept, keyword, name, section label, or number found in the source excerpt.',
+    '- right_answer must not start with "a", "an", or "the".',
+    '- Write short-question prompts so they naturally expect a single term answer.',
+    '- Avoid open-ended wording such as "What is the purpose of..."; prefer concrete prompts like "Which term/section/concept...".',
+  ].join("\n");
 }
