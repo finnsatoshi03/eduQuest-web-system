@@ -194,13 +194,12 @@ const QuizCard: React.FC<QuizCardProps> = ({
       <div className="flex flex-grow flex-col justify-between">
         <div className="space-y-1">
           <p
-            className={`w-fit rounded-full px-2 text-[0.6rem] font-semibold uppercase ${
-              quiz.status === QUIZ_STATUS.DRAFT
+            className={`w-fit rounded-full px-2 text-[0.6rem] font-semibold uppercase ${quiz.status === QUIZ_STATUS.DRAFT
                 ? "bg-red-300 text-red-700"
                 : (quiz.status === QUIZ_STATUS.SCHEDULED ||
-                      quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
-                      quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
-                    timeStatus === "closed"
+                  quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
+                  quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) &&
+                  timeStatus === "closed"
                   ? "bg-gray-300 text-gray-700"
                   : quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED
                     ? "bg-green-300 text-green-700"
@@ -211,7 +210,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                         : quiz.status === QUIZ_STATUS.IN_GAME
                           ? "bg-blue-300 text-blue-700"
                           : "bg-green-300 text-green-700"
-            }`}
+              }`}
           >
             {timeStatus === "closed"
               ? "Closed"
@@ -345,72 +344,72 @@ const QuizCard: React.FC<QuizCardProps> = ({
           {(quiz.status === QUIZ_STATUS.SCHEDULED ||
             quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
             quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED) && (
-            <>
-              {quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED ? (
-                // Completed scheduled quiz - only show responses button
-                <Button
-                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
-                  onClick={handleResponses}
-                >
-                  <UsersRound size={14} />
-                  View Results
-                </Button>
-              ) : quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ? (
-                // Scheduled quiz in progress - only show check responses
-                <Button
-                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
-                  onClick={handleResponses}
-                >
-                  <UsersRound size={14} />
-                  Monitor Responses
-                </Button>
-              ) : timeStatus === "upcoming" ? (
-                // Scheduled but not yet ready
-                <Button
-                  variant="outline"
-                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
-                  onClick={() => onEdit(quiz.quiz_id)}
-                >
-                  <Pen size={14} />
-                  Edit Quiz
-                </Button>
-              ) : timeStatus === "ready" ? (
-                // Scheduled and ready to start
-                <>
+              <>
+                {quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED ? (
+                  // Completed scheduled quiz - only show responses button
                   <Button
                     className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
-                    onClick={handleStartScheduledQuiz}
+                    onClick={handleResponses}
                   >
-                    {isLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Play size={14} />
-                        Start Quiz
-                      </>
-                    )}
+                    <UsersRound size={14} />
+                    View Results
                   </Button>
+                ) : quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ? (
+                  // Scheduled quiz in progress - only show check responses
+                  <Button
+                    className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                    onClick={handleResponses}
+                  >
+                    <UsersRound size={14} />
+                    Monitor Responses
+                  </Button>
+                ) : timeStatus === "upcoming" ? (
+                  // Scheduled but not yet ready
                   <Button
                     variant="outline"
+                    className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                    onClick={() => onEdit(quiz.quiz_id)}
+                  >
+                    <Pen size={14} />
+                    Edit Quiz
+                  </Button>
+                ) : timeStatus === "ready" ? (
+                  // Scheduled and ready to start
+                  <>
+                    <Button
+                      className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                      onClick={handleStartScheduledQuiz}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Play size={14} />
+                          Start Quiz
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
+                      onClick={handleResponses}
+                    >
+                      <UsersRound size={14} />
+                      Check Responses
+                    </Button>
+                  </>
+                ) : (
+                  // Scheduled and in progress (timeStatus === "active")
+                  <Button
                     className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
                     onClick={handleResponses}
                   >
                     <UsersRound size={14} />
                     Check Responses
                   </Button>
-                </>
-              ) : (
-                // Scheduled and in progress (timeStatus === "active")
-                <Button
-                  className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
-                  onClick={handleResponses}
-                >
-                  <UsersRound size={14} />
-                  Check Responses
-                </Button>
-              )}
-            </>
-          )}
+                )}
+              </>
+            )}
           {quiz.status === QUIZ_STATUS.IN_LOBBY && (
             <Button
               className="h-fit w-fit gap-1 text-xs md:h-full md:text-sm"
@@ -465,23 +464,27 @@ export default function ProfessorDashboard() {
   } | null>(null);
 
   const safeQuizzes: Quiz[] = Array.isArray(quizzes) ? quizzes : [quizzes];
+  const allQuizzes = [...safeQuizzes].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 
   // Filter quizzes by status
-  const activeQuizzes = safeQuizzes.filter(
+  const activeQuizzes = allQuizzes.filter(
     (quiz) => quiz.status === QUIZ_STATUS.ACTIVE,
   );
   // CRITICAL: Include SCHEDULED, SCHEDULED_IN_GAME, and SCHEDULED_COMPLETED in scheduled tab
   // This keeps all scheduled quizzes (pending, in-progress, and completed) in the scheduled category
-  const scheduledQuizzes = safeQuizzes.filter(
+  const scheduledQuizzes = allQuizzes.filter(
     (quiz) =>
       quiz.status === QUIZ_STATUS.SCHEDULED ||
       quiz.status === QUIZ_STATUS.SCHEDULED_IN_GAME ||
       quiz.status === QUIZ_STATUS.SCHEDULED_COMPLETED,
   );
-  const draftQuizzes = safeQuizzes.filter(
+  const draftQuizzes = allQuizzes.filter(
     (quiz) => quiz.status === QUIZ_STATUS.DRAFT,
   );
-  const inLobbyQuizzes = safeQuizzes.filter(
+  const inLobbyQuizzes = allQuizzes.filter(
     (quiz) =>
       quiz.status === QUIZ_STATUS.IN_LOBBY ||
       quiz.status === QUIZ_STATUS.IN_GAME,
@@ -542,11 +545,29 @@ export default function ProfessorDashboard() {
     }
   };
 
+  const renderQuizList = (quizList: Quiz[], emptyMessage: string) => {
+    if (quizList.length === 0) {
+      return <p>{emptyMessage}</p>;
+    }
+
+    return quizList.map((quiz: Quiz) => (
+      <QuizCard
+        key={quiz.quiz_id}
+        quiz={quiz}
+        user={user!}
+        onEdit={() => navigate(`/professor/quiz/${quiz.quiz_id}/customize`)}
+        onDelete={mutateDeleteQuiz}
+        onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
+        nav={navigate}
+      />
+    ));
+  };
+
   if (isPending) return <Loader />;
   if (isError) return <p>Error loading quizzes.</p>;
 
   return (
-    <div className="p-4">
+    <div className="flex h-[calc(100dvh-6rem)] flex-col overflow-hidden p-4">
       {/* Analytics Overview Section */}
       {!isLoadingStats && overallStats && (
         <div className="mb-6">
@@ -556,9 +577,12 @@ export default function ProfessorDashboard() {
       )}
 
       {/* Quiz Management Tabs */}
-      <Tabs defaultValue="active-quizzes">
+      <Tabs defaultValue="all-quizzes" className="flex min-h-0 flex-1 flex-col">
         <div className="flex justify-between">
-          <TabsList>
+          <TabsList className="h-auto flex-wrap justify-start gap-1">
+            <TabsTrigger value="all-quizzes">
+              All ({allQuizzes.length})
+            </TabsTrigger>
             <TabsTrigger value="active-quizzes">
               Active ({activeQuizzes.length})
             </TabsTrigger>
@@ -586,81 +610,35 @@ export default function ProfessorDashboard() {
             )}
           </Button>
         </div>
-        <TabsContent value="active-quizzes">
-          {activeQuizzes.length > 0 ? (
-            activeQuizzes.map((quiz: Quiz) => (
-              <QuizCard
-                key={quiz.quiz_id}
-                quiz={quiz}
-                user={user!}
-                onEdit={() =>
-                  navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
-                }
-                onDelete={mutateDeleteQuiz}
-                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
-                nav={navigate}
-              />
-            ))
-          ) : (
-            <p>No active quizzes available.</p>
-          )}
+        <TabsContent
+          value="all-quizzes"
+          className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
+        >
+          {renderQuizList(allQuizzes, "No quizzes available.")}
         </TabsContent>
-        <TabsContent value="lobbied-quizzes">
-          {inLobbyQuizzes.length > 0 ? (
-            inLobbyQuizzes.map((quiz: Quiz) => (
-              <QuizCard
-                key={quiz.quiz_id}
-                quiz={quiz}
-                user={user!}
-                onEdit={() =>
-                  navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
-                }
-                onDelete={mutateDeleteQuiz}
-                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
-                nav={navigate}
-              />
-            ))
-          ) : (
-            <p>No started quizzes available.</p>
-          )}
+        <TabsContent
+          value="active-quizzes"
+          className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
+        >
+          {renderQuizList(activeQuizzes, "No active quizzes available.")}
         </TabsContent>
-        <TabsContent value="scheduled-quizzes">
-          {scheduledQuizzes.length > 0 ? (
-            scheduledQuizzes.map((quiz: Quiz) => (
-              <QuizCard
-                key={quiz.quiz_id}
-                quiz={quiz}
-                user={user!}
-                onEdit={() =>
-                  navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
-                }
-                onDelete={mutateDeleteQuiz}
-                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
-                nav={navigate}
-              />
-            ))
-          ) : (
-            <p>No scheduled quizzes available.</p>
-          )}
+        <TabsContent
+          value="lobbied-quizzes"
+          className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
+        >
+          {renderQuizList(inLobbyQuizzes, "No started quizzes available.")}
         </TabsContent>
-        <TabsContent value="draft">
-          {draftQuizzes.length > 0 ? (
-            draftQuizzes.map((quiz: Quiz) => (
-              <QuizCard
-                key={quiz.quiz_id}
-                quiz={quiz}
-                user={user!}
-                onEdit={() =>
-                  navigate(`/professor/quiz/${quiz.quiz_id}/customize`)
-                }
-                onDelete={mutateDeleteQuiz}
-                onClone={() => handleCloneQuiz(quiz.quiz_id, quiz.title)}
-                nav={navigate}
-              />
-            ))
-          ) : (
-            <p>No draft quizzes available.</p>
-          )}
+        <TabsContent
+          value="scheduled-quizzes"
+          className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
+        >
+          {renderQuizList(scheduledQuizzes, "No scheduled quizzes available.")}
+        </TabsContent>
+        <TabsContent
+          value="draft"
+          className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
+        >
+          {renderQuizList(draftQuizzes, "No draft quizzes available.")}
         </TabsContent>
       </Tabs>
 

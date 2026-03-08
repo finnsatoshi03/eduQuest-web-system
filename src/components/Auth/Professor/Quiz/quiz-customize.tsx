@@ -42,7 +42,6 @@ import {
   Copy,
   Plus,
   AlertTriangle,
-  WandSparkles,
   Info,
 } from "lucide-react";
 import { formatQuestionType, questionTypeIcon } from "@/lib/helpers";
@@ -75,6 +74,7 @@ const DIFFICULTY_WEIGHT: Record<QuestionDifficulty, number> = {
   medium: 1,
   hard: 2,
 };
+const DEFAULT_TIME_OPTIONS = [10, 15, 20, 30, 60];
 
 const iconMapping = {
   Scale: Scale,
@@ -101,6 +101,21 @@ function applySequentialDifficulty(
     ...question,
     difficulty: DIFFICULTY_SEQUENCE[index % DIFFICULTY_SEQUENCE.length],
   }));
+}
+
+function getDynamicNumericOptions(
+  defaultOptions: number[],
+  currentValue?: number | null,
+): number[] {
+  const mergedOptions = new Set(defaultOptions);
+  if (
+    typeof currentValue === "number" &&
+    Number.isFinite(currentValue) &&
+    currentValue > 0
+  ) {
+    mergedOptions.add(Math.round(currentValue));
+  }
+  return Array.from(mergedOptions).sort((a, b) => a - b);
 }
 
 export default function CustomizeQuiz() {
@@ -198,10 +213,10 @@ export default function CustomizeQuiz() {
       ) => updateQuestionOrderAndDifficulty(quizId!, updates),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
-        toast.success("Questions organized successfully");
+        toast.success("Questions organized by difficulty");
       },
       onError: (error: Error) => {
-        toast.error(error.message || "Failed to organize questions");
+        toast.error(error.message || "Failed to organize by difficulty");
         queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
       },
     });
@@ -323,19 +338,19 @@ export default function CustomizeQuiz() {
     const organizedQuestions =
       mode === "grouped"
         ? [...sequentialDifficulty]
-            .sort((a, b) => {
-              const weightA = DIFFICULTY_WEIGHT[a.difficulty];
-              const weightB = DIFFICULTY_WEIGHT[b.difficulty];
-              if (weightA !== weightB) {
-                return weightA - weightB;
-              }
-              return a.order - b.order;
-            })
-            .map((question, index) => ({ ...question, order: index + 1 }))
+          .sort((a, b) => {
+            const weightA = DIFFICULTY_WEIGHT[a.difficulty];
+            const weightB = DIFFICULTY_WEIGHT[b.difficulty];
+            if (weightA !== weightB) {
+              return weightA - weightB;
+            }
+            return a.order - b.order;
+          })
+          .map((question, index) => ({ ...question, order: index + 1 }))
         : sequentialDifficulty.map((question, index) => ({
-            ...question,
-            order: index + 1,
-          }));
+          ...question,
+          order: index + 1,
+        }));
 
     setLastOrganizeSnapshot(questions);
     setQuestions(organizedQuestions);
@@ -467,7 +482,7 @@ export default function CustomizeQuiz() {
 
             <div className="space-y-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-700">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold">Smart Organize</p>
+                <p className="text-sm font-semibold">Difficulty Organizer</p>
                 <TooltipProvider delayDuration={100}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -479,7 +494,7 @@ export default function CustomizeQuiz() {
                       </button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      Automatically organize questions by difficulty level.
+                      Automatically organize questions by difficulty.
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -512,8 +527,7 @@ export default function CustomizeQuiz() {
                   onClick={() => handleSmartOrganize(smartOrganizeMode)}
                   disabled={questions.length === 0 || isOrganizing}
                 >
-                  <WandSparkles size={16} />
-                  {isOrganizing ? "Organizing..." : "Apply"}
+                  {isOrganizing ? "Applying..." : "Apply"}
                 </Button>
                 <Button
                   type="button"
@@ -557,6 +571,10 @@ export default function CustomizeQuiz() {
                     >
                       {questions.map((q, index) => {
                         const isIncomplete = isQuestionIncomplete(q);
+                        const timeOptions = getDynamicNumericOptions(
+                          DEFAULT_TIME_OPTIONS,
+                          q.time,
+                        );
                         return (
                           <Draggable
                             key={q.quiz_question_id}
@@ -568,13 +586,11 @@ export default function CustomizeQuiz() {
                               <li
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
-                                className={`relative rounded-lg bg-white p-4 shadow dark:bg-zinc-900 ${
-                                  snapshot.isDragging ? "opacity-50" : ""
-                                } ${
-                                  isIncomplete
+                                className={`relative rounded-lg bg-white p-4 shadow dark:bg-zinc-900 ${snapshot.isDragging ? "opacity-50" : ""
+                                  } ${isIncomplete
                                     ? "bg-red-100 dark:bg-red-900/20"
                                     : ""
-                                }`}
+                                  }`}
                               >
                                 <div>
                                   <div className="mb-2 flex flex-wrap justify-between text-xs">
@@ -585,7 +601,7 @@ export default function CustomizeQuiz() {
                                       <div className="flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 dark:border-zinc-800">
                                         {React.createElement(
                                           iconMapping[
-                                            questionTypeIcon(q.question_type)
+                                          questionTypeIcon(q.question_type)
                                           ],
                                           { size: 12 },
                                         )}
@@ -594,7 +610,6 @@ export default function CustomizeQuiz() {
                                           {formatQuestionType(q.question_type)}
                                         </p>
                                       </div>
-                                      <DifficultyBadge difficulty={q.difficulty} />
                                       <Select
                                         onValueChange={(value) =>
                                           updateSingle({
@@ -643,7 +658,7 @@ export default function CustomizeQuiz() {
                                         <SelectContent>
                                           <SelectGroup>
                                             <SelectLabel>Time</SelectLabel>
-                                            {[10, 15, 20, 30, 60].map(
+                                            {timeOptions.map(
                                               (value) => (
                                                 <SelectItem
                                                   key={value}
@@ -657,6 +672,7 @@ export default function CustomizeQuiz() {
                                           </SelectGroup>
                                         </SelectContent>
                                       </Select>
+                                      <DifficultyBadge difficulty={q.difficulty} />
                                     </div>
                                     <div className="mt-3 flex gap-2 md:mt-0">
                                       <Button
@@ -670,11 +686,10 @@ export default function CustomizeQuiz() {
                                         <Copy className="size-6 rounded-md py-1" />
                                       </Button>
                                       <button
-                                        className={`flex h-fit w-fit items-center gap-1 rounded-md border px-2 py-1 ${
-                                          isIncomplete
-                                            ? "border-yellow-500 bg-yellow-100 text-yellow-700 dark:border-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-200"
-                                            : "border-zinc-200 dark:border-zinc-800"
-                                        }`}
+                                        className={`flex h-fit w-fit items-center gap-1 rounded-md border px-2 py-1 ${isIncomplete
+                                          ? "border-yellow-500 bg-yellow-100 text-yellow-700 dark:border-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-200"
+                                          : "border-zinc-200 dark:border-zinc-800"
+                                          }`}
                                         onClick={() =>
                                           navigate(
                                             `/professor/quiz/${quizId}/question/${q.quiz_question_id}/edit`,
@@ -685,11 +700,10 @@ export default function CustomizeQuiz() {
                                         Edit
                                       </button>
                                       <Trash
-                                        className={`size-6 cursor-pointer rounded-md p-1 text-white ${
-                                          isIncomplete
-                                            ? "bg-red-500"
-                                            : "bg-red-600"
-                                        }`}
+                                        className={`size-6 cursor-pointer rounded-md p-1 text-white ${isIncomplete
+                                          ? "bg-red-500"
+                                          : "bg-red-600"
+                                          }`}
                                         onClick={() =>
                                           handleDelete(q.quiz_question_id)
                                         }
@@ -719,15 +733,14 @@ export default function CustomizeQuiz() {
                                           (a, index) => (
                                             <div
                                               key={index}
-                                              className={`flex items-center rounded-lg p-2 text-xs shadow ${
-                                                a.toLowerCase() ===
+                                              className={`flex items-center rounded-lg p-2 text-xs shadow ${a.toLowerCase() ===
                                                 q.right_answer.toLowerCase()
-                                                  ? "bg-green-500 text-white"
-                                                  : "bg-zinc-200 dark:bg-zinc-800"
-                                              }`}
+                                                ? "bg-green-500 text-white"
+                                                : "bg-zinc-200 dark:bg-zinc-800"
+                                                }`}
                                             >
                                               {a.toLowerCase() ===
-                                              q.right_answer.toLowerCase() ? (
+                                                q.right_answer.toLowerCase() ? (
                                                 <Check
                                                   className="mr-2"
                                                   size={16}
