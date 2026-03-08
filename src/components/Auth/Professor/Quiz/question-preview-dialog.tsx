@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import { useMediaQuery } from "react-responsive";
 import Loader from "@/components/Shared/Loader";
 import { GAME_COLORS } from "@/lib/constants";
 import DifficultyBadge from "@/components/Shared/difficulty-badge";
+import FeedbackState from "@/components/Shared/feedback-state";
 
 interface QuizPreviewDialogProps {
   open: boolean;
@@ -49,7 +50,8 @@ const iconMapping = {
 
 const QuizPreviewDialog = ({ open, onOpenChange }: QuizPreviewDialogProps) => {
   const { quizId } = useParams();
-  const { quiz, questions, isLoading, isError } = useQuizData(quizId!);
+  const navigate = useNavigate();
+  const { quiz, questions, isLoading, isError, refetch } = useQuizData(quizId!);
   const [showAnswers, setShowAnswers] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const { theme } = useTheme();
@@ -220,7 +222,40 @@ const QuizPreviewDialog = ({ open, onOpenChange }: QuizPreviewDialogProps) => {
   };
 
   if (isLoading) return <Loader />;
-  if (isError) return <div>Error loading quiz data</div>;
+  if (isError) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="dark:text-white">
+          <DialogHeader>
+            <DialogTitle>Preview unavailable</DialogTitle>
+          </DialogHeader>
+          <FeedbackState
+            variant="error"
+            title="Couldn't load preview data"
+            description="Try again or go back to the dashboard."
+            className="min-h-[260px]"
+            actions={[
+              {
+                label: "Retry",
+                onClick: () => {
+                  void refetch();
+                },
+                variant: "default",
+              },
+              {
+                label: "Back to dashboard",
+                onClick: () => {
+                  onOpenChange(false);
+                  navigate("/professor/dashboard");
+                },
+                variant: "outline",
+              },
+            ]}
+          />
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -293,10 +328,29 @@ const QuizPreviewDialog = ({ open, onOpenChange }: QuizPreviewDialogProps) => {
               </div>
             </>
           ) : (
-            <div>
-              No complete questions available. Please finish creating at least
-              one question.
-            </div>
+            <FeedbackState
+              title="No preview-ready questions"
+              description="Complete at least one question so students can preview the quiz flow."
+              className="min-h-[280px] border-none bg-transparent dark:bg-transparent"
+              actions={[
+                {
+                  label: "Re-generate",
+                  onClick: () => {
+                    onOpenChange(false);
+                    navigate(`/professor/quiz/${quizId}/generate-quiz`);
+                  },
+                  variant: "default",
+                },
+                {
+                  label: "Back to dashboard",
+                  onClick: () => {
+                    onOpenChange(false);
+                    navigate("/professor/dashboard");
+                  },
+                  variant: "outline",
+                },
+              ]}
+            />
           )}
         </>
       </DialogContent>

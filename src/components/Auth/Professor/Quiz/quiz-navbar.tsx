@@ -21,6 +21,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateQuizAndQuestions, deleteQuiz } from "@/services/api/apiQuiz";
 import toast from "react-hot-toast";
 import Loader from "@/components/Shared/Loader";
+import FeedbackState from "@/components/Shared/feedback-state";
 
 export default function QuizNavbar() {
   const { quizId } = useParams<{ quizId: string }>();
@@ -42,6 +43,7 @@ export default function QuizNavbar() {
     quiz,
     isLoading: isPending,
     isError,
+    refetch,
     updateTitle,
     questions,
   } = useQuizData(quizId!);
@@ -172,7 +174,31 @@ export default function QuizNavbar() {
   };
 
   if (isPending) return <Loader />;
-  if (isError) return <div>Error loading quiz data</div>;
+  if (isError) {
+    return (
+      <div className="px-6 py-4">
+        <FeedbackState
+          variant="error"
+          title="Couldn't load quiz details"
+          description="Retry loading this quiz, or go back to your dashboard."
+          actions={[
+            {
+              label: "Retry",
+              onClick: () => {
+                void refetch();
+              },
+              variant: "default",
+            },
+            {
+              label: "Back to dashboard",
+              onClick: () => navigate("/professor/dashboard"),
+              variant: "outline",
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="-mx-6 flex w-screen flex-wrap items-center justify-between px-6 py-4 shadow-xl md:-mx-12 lg:-mx-16">

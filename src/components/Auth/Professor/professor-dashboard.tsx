@@ -50,6 +50,7 @@ import toast from "react-hot-toast";
 import { useProfessorOverallStats } from "@/hooks/useProfessorAnalytics";
 import OverallStatsCards from "./Dashboard/OverallStatsCards";
 import { QUIZ_STATUS, QuizStatus } from "@/lib/constants/quizStatus";
+import FeedbackState from "@/components/Shared/feedback-state";
 
 interface QuizCardProps {
   quiz: Quiz;
@@ -453,7 +454,7 @@ export default function ProfessorDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { quizzes = [], isPending, isError } = useGetQuizzes();
+  const { quizzes = [], isPending, isError, refetch } = useGetQuizzes();
   const { data: overallStats, isLoading: isLoadingStats } =
     useProfessorOverallStats(user?.id);
 
@@ -545,9 +546,32 @@ export default function ProfessorDashboard() {
     }
   };
 
-  const renderQuizList = (quizList: Quiz[], emptyMessage: string) => {
+  const renderQuizList = (
+    quizList: Quiz[],
+    emptyTitle: string,
+    emptyDescription: string,
+  ) => {
     if (quizList.length === 0) {
-      return <p>{emptyMessage}</p>;
+      return (
+        <FeedbackState
+          title={emptyTitle}
+          description={emptyDescription}
+          actions={[
+            {
+              label: "Create Quiz",
+              onClick: createNewQuiz,
+              variant: "default",
+            },
+            {
+              label: "Retry",
+              onClick: () => {
+                void refetch();
+              },
+              variant: "outline",
+            },
+          ]}
+        />
+      );
     }
 
     return quizList.map((quiz: Quiz) => (
@@ -564,7 +588,26 @@ export default function ProfessorDashboard() {
   };
 
   if (isPending) return <Loader />;
-  if (isError) return <p>Error loading quizzes.</p>;
+  if (isError) {
+    return (
+      <div className="p-4">
+        <FeedbackState
+          variant="error"
+          title="Couldn't load quizzes"
+          description="There was a problem loading your dashboard data."
+          actions={[
+            {
+              label: "Retry",
+              onClick: () => {
+                void refetch();
+              },
+              variant: "default",
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100dvh-6rem)] flex-col overflow-hidden p-4">
@@ -614,31 +657,51 @@ export default function ProfessorDashboard() {
           value="all-quizzes"
           className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
         >
-          {renderQuizList(allQuizzes, "No quizzes available.")}
+          {renderQuizList(
+            allQuizzes,
+            "No quizzes yet",
+            "Create your first quiz to start assigning games to students.",
+          )}
         </TabsContent>
         <TabsContent
           value="active-quizzes"
           className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
         >
-          {renderQuizList(activeQuizzes, "No active quizzes available.")}
+          {renderQuizList(
+            activeQuizzes,
+            "No active quizzes",
+            "Start or publish a draft quiz to make it active.",
+          )}
         </TabsContent>
         <TabsContent
           value="lobbied-quizzes"
           className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
         >
-          {renderQuizList(inLobbyQuizzes, "No started quizzes available.")}
+          {renderQuizList(
+            inLobbyQuizzes,
+            "No started quizzes",
+            "Start a quiz to move it into the lobby.",
+          )}
         </TabsContent>
         <TabsContent
           value="scheduled-quizzes"
           className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
         >
-          {renderQuizList(scheduledQuizzes, "No scheduled quizzes available.")}
+          {renderQuizList(
+            scheduledQuizzes,
+            "No scheduled quizzes",
+            "Schedule a quiz with open and close times to see it here.",
+          )}
         </TabsContent>
         <TabsContent
           value="draft"
           className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2"
         >
-          {renderQuizList(draftQuizzes, "No draft quizzes available.")}
+          {renderQuizList(
+            draftQuizzes,
+            "No draft quizzes",
+            "Create a new quiz and save it as draft to continue later.",
+          )}
         </TabsContent>
       </Tabs>
 

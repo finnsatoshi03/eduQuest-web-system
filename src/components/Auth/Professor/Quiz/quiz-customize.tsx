@@ -60,6 +60,7 @@ import {
 import QuizTypeModal from "./quiz-type-modal";
 import Loader from "@/components/Shared/Loader";
 import DifficultyBadge from "@/components/Shared/difficulty-badge";
+import FeedbackState from "@/components/Shared/feedback-state";
 import {
   Tooltip,
   TooltipContent,
@@ -465,7 +466,32 @@ export default function CustomizeQuiz() {
   };
 
   if (isPending) return <Loader />;
-  if (isError) return <div>Error loading questions</div>;
+  if (isError) {
+    return (
+      <div className="py-8">
+        <FeedbackState
+          variant="error"
+          title="Couldn't load quiz questions"
+          description="Please try again. If this keeps happening, go back to the dashboard and reopen the quiz."
+          actions={[
+            {
+              label: "Retry",
+              onClick: () => {
+                queryClient.invalidateQueries({ queryKey: ["quiz", quizId] });
+                queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
+              },
+              variant: "default",
+            },
+            {
+              label: "Back to dashboard",
+              onClick: () => navigate("/professor/dashboard"),
+              variant: "outline",
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   const totalPoints = Array.isArray(questions)
     ? questions.reduce((total, q) => total + (q.points ?? 0), 0)
@@ -940,20 +966,24 @@ export default function CustomizeQuiz() {
                 </Droppable>
               </DragDropContext>
             ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-4">
-                <p className="text-center text-gray-500">
-                  No questions available. Please generate some questions to get
-                  started.
-                </p>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    navigate(`/professor/quiz/${quizId}/generate-quiz`)
-                  }
-                >
-                  Generate Questions
-                </Button>
-              </div>
+              <FeedbackState
+                title="No questions yet"
+                description="Generate questions from your content, or add questions manually."
+                className="h-full border-none bg-transparent dark:bg-transparent"
+                actions={[
+                  {
+                    label: "Re-generate",
+                    onClick: () =>
+                      navigate(`/professor/quiz/${quizId}/generate-quiz`),
+                    variant: "default",
+                  },
+                  {
+                    label: "Back to dashboard",
+                    onClick: () => navigate("/professor/dashboard"),
+                    variant: "outline",
+                  },
+                ]}
+              />
             )}
           </div>
           <Button

@@ -55,8 +55,11 @@ export function useQuizData(quizId: string) {
   return {
     quiz: quizQuery.data,
     questions: questionsQuery.data,
-    isLoading: quizQuery.isPending,
-    isError: quizQuery.isError,
+    isLoading: quizQuery.isPending || questionsQuery.isPending,
+    isError: quizQuery.isError || questionsQuery.isError,
+    refetch: async () => {
+      await Promise.all([quizQuery.refetch(), questionsQuery.refetch()]);
+    },
     updateTitle: updateTitleMutation.mutate,
   };
 }

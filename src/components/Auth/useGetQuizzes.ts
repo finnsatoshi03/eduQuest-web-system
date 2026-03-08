@@ -6,7 +6,7 @@ export function useGetQuizzes() {
   const { user } = useAuth();
   const ownerId = user ? user.id : null;
 
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["quizzes", ownerId],
     queryFn: async () => {
       const data = await getQuizzesByOwnerId(ownerId!);
@@ -19,5 +19,5 @@ export function useGetQuizzes() {
     enabled: !!ownerId,
   });
 
-  return { quizzes: data, isPending, isError };
+  return { quizzes: data, isPending, isError, refetch };
 }
