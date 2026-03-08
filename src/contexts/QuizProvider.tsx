@@ -1,10 +1,25 @@
 import React, { createContext, useState, useContext } from "react";
-import { generateQuestions } from "@/services/api/apiQuiz";
+import {
+  generateQuestions,
+  GenerateQuizProgressEvent,
+  GenerateQuizProgressStage,
+} from "@/services/api/apiQuiz";
 import { QuestionDifficulty } from "@/lib/types";
 import supabase from "@/services/supabase";
 import toast from "react-hot-toast";
 interface QuizProviderProps {
   children: React.ReactNode;
+}
+
+export type QuizGenerationStage =
+  | "updating_quiz_settings"
+  | GenerateQuizProgressStage
+  | "replacing_existing_questions"
+  | "saving_generated_questions";
+
+interface UpdateQuizOptions {
+  signal?: AbortSignal;
+  onProgress?: (stage: QuizGenerationStage) => void;
 }
 
 interface QuizContextType {
@@ -16,7 +31,11 @@ interface QuizContextType {
   setQuizData: React.Dispatch<
     React.SetStateAction<QuizContextType["quizData"]>
   >;
-  updateQuiz: (quizId: string, maxQuestions: number) => Promise<string | null>;
+  updateQuiz: (
+    quizId: string,
+    maxQuestions: number,
+    options?: UpdateQuizOptions,
+  ) => Promise<string | null>;
 }
 
 const QuizContext = createContext<QuizContextType | undefined>(undefined);
@@ -43,8 +62,26 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
     maxQuestions: null,
   });
 
-  const updateQuiz = async (quizId: string, maxQuestions: number) => {
+  const updateQuiz = async (
+    quizId: string,
+    maxQuestions: number,
+    options?: UpdateQuizOptions,
+  ) => {
+    const throwIfAborted = () => {
+      if (options?.signal?.aborted) {
+        const abortError = new Error("Quiz generation was cancelled.");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
+    };
+    const emitProgress = (stage: QuizGenerationStage) => {
+      options?.onProgress?.(stage);
+    };
+
     try {
+      emitProgress("updating_quiz_settings");
+      throwIfAborted();
+
       // Step 1: Update the quiz in the quiz table
       // console.log(quizId, maxQuestions, quizData.questionType);
       const { error: quizError } = await supabase
@@ -65,10 +102,18 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
         throw new Error("Incomplete quiz data");
       }
 
+      throwIfAborted();
+
       const generatedQuestions = await generateQuestions(
         quizData.file,
         quizData.questionType,
         maxQuestions.toString(),
+        undefined,
+        {
+          signal: options?.signal,
+          onProgress: (event: GenerateQuizProgressEvent) =>
+            emitProgress(event.stage),
+        },
       );
 
       if (Array.isArray(generatedQuestions)) {
@@ -80,6 +125,9 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
         }
       }
 
+      throwIfAborted();
+      emitProgress("replacing_existing_questions");
+
       // Step 3: Delete existing questions for this quiz
       const { error: deleteError } = await supabase
         .from("quiz_questions")
@@ -87,6 +135,9 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
         .eq("quiz_id", quizId);
 
       if (deleteError) throw deleteError;
+
+      throwIfAborted();
+      emitProgress("saving_generated_questions");
 
       // Step 4: Insert new generated questions into quiz_questions table
       const { error: questionsError } = await supabase
@@ -121,10 +172,14 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
 
       if (questionsError) throw questionsError;
 
+      emitProgress("completed");
       return quizId;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error updating quiz:", error);
-      return null;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to generate quiz.");
     }
   };
 

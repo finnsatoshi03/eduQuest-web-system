@@ -271,9 +271,47 @@ export async function generateQuestions(
   questionType: string,
   numQuestions: string,
   quizSettings?: Record<string, string | number | boolean>,
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (event: GenerateQuizProgressEvent) => void;
+  },
 ): Promise<QuizQuestions[] | null> {
   let generateQuestionsResponse;
+  let progressTimer: ReturnType<typeof setInterval> | null = null;
+
+  const progressStages: GenerateQuizProgressStage[] = [
+    "uploading_pdf",
+    "extracting_pdf_text",
+    "chunking_content",
+    "generating_questions",
+    "formatting_response",
+    "completed",
+  ];
+  const progressLabels: Record<GenerateQuizProgressStage, string> = {
+    uploading_pdf: "Uploading PDF...",
+    extracting_pdf_text: "Extracting PDF text...",
+    chunking_content: "Chunking document content...",
+    generating_questions: "Generating questions with AI...",
+    formatting_response: "Formatting quiz JSON...",
+    completed: "Generation complete.",
+  };
+  const emitProgress = (stage: GenerateQuizProgressStage) => {
+    const stageIndex = progressStages.indexOf(stage);
+    options?.onProgress?.({
+      stage,
+      message: progressLabels[stage],
+      step: stageIndex + 1,
+      totalSteps: progressStages.length,
+    });
+  };
+
   try {
+    if (options?.signal?.aborted) {
+      const abortError = new Error("Quiz generation was cancelled.");
+      abortError.name = "AbortError";
+      throw abortError;
+    }
+
     const formData = new FormData();
     formData.append("pdf", file);
     formData.append("question_type", questionType);
@@ -282,10 +320,27 @@ export async function generateQuestions(
       formData.append("settings", JSON.stringify(quizSettings));
     }
 
+    emitProgress("uploading_pdf");
+    const pendingStages: GenerateQuizProgressStage[] = [
+      "extracting_pdf_text",
+      "chunking_content",
+      "generating_questions",
+      "formatting_response",
+    ];
+    let stageCursor = 0;
+    progressTimer = setInterval(() => {
+      if (stageCursor >= pendingStages.length) {
+        return;
+      }
+      emitProgress(pendingStages[stageCursor]);
+      stageCursor += 1;
+    }, 1200);
+
     generateQuestionsResponse = await axios.post(qgen, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      signal: options?.signal,
     });
 
     if (generateQuestionsResponse.status === 200) {
@@ -308,15 +363,53 @@ export async function generateQuestions(
       //   ]
       // }
       // console.log(generateQuestions.data.questions);
-
+      emitProgress("completed");
       return generateQuestionsResponse.data.questions;
     } else {
       throw new Error("Something went wrong! Please try again later.");
     }
-  } catch {
+  } catch (error: unknown) {
+    if (
+      (axios.isAxiosError(error) && error.code === "ERR_CANCELED") ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      const abortError = new Error("Quiz generation was cancelled.");
+      abortError.name = "AbortError";
+      throw abortError;
+    }
+
+    if (axios.isAxiosError(error)) {
+      const apiErrorMessage =
+        typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : null;
+      throw new Error(
+        apiErrorMessage || "Something went wrong! Please try again later.",
+      );
+    }
+
     console.log("Error generating questions:", generateQuestionsResponse);
     throw new Error("Something went wrong! Please try again later.");
+  } finally {
+    if (progressTimer) {
+      clearInterval(progressTimer);
+    }
   }
+}
+
+export type GenerateQuizProgressStage =
+  | "uploading_pdf"
+  | "extracting_pdf_text"
+  | "chunking_content"
+  | "generating_questions"
+  | "formatting_response"
+  | "completed";
+
+export interface GenerateQuizProgressEvent {
+  stage: GenerateQuizProgressStage;
+  message: string;
+  step: number;
+  totalSteps: number;
 }
 
 export async function getQuestions(

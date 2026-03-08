@@ -1,23 +1,50 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Minus, Plus } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { useQuiz } from "@/contexts/QuizProvider";
+import { QuizGenerationStage, useQuiz } from "@/contexts/QuizProvider";
 import { MultiStepLoader } from "@/components/Shared/MultiStepLoader";
-import { getLoadingStates } from "@/lib/helpers";
 
 const MAX_QUESTIONS_OPTIONS = [5, 10, 15, 20];
+const GENERATION_PROGRESS_STEPS: Array<{
+  stage: QuizGenerationStage;
+  text: string;
+}> = [
+  { stage: "updating_quiz_settings", text: "Saving quiz settings..." },
+  { stage: "uploading_pdf", text: "Uploading PDF..." },
+  { stage: "extracting_pdf_text", text: "Extracting text from PDF..." },
+  { stage: "chunking_content", text: "Chunking document content..." },
+  { stage: "generating_questions", text: "Generating questions with AI..." },
+  { stage: "formatting_response", text: "Formatting generated questions..." },
+  {
+    stage: "replacing_existing_questions",
+    text: "Removing previous quiz questions...",
+  },
+  { stage: "saving_generated_questions", text: "Saving generated questions..." },
+  { stage: "completed", text: "Done. Redirecting to quiz editor..." },
+];
 
 export default function MaxQuestionsSelector() {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [customValue, setCustomValue] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [activeStage, setActiveStage] =
+    useState<QuizGenerationStage>("updating_quiz_settings");
   const { quizId } = useParams();
-  const { quizData, updateQuiz } = useQuiz();
+  const { updateQuiz } = useQuiz();
   const navigate = useNavigate();
+  const generationAbortControllerRef = useRef<AbortController | null>(null);
+
+  const activeStageIndex = useMemo(() => {
+    const index = GENERATION_PROGRESS_STEPS.findIndex(
+      (step) => step.stage === activeStage,
+    );
+    return index === -1 ? 0 : index;
+  }, [activeStage]);
 
   const handleOptionClick = (value: number) => {
     setSelectedOption(value);
@@ -37,13 +64,27 @@ export default function MaxQuestionsSelector() {
     setSelectedOption(null);
   };
 
+  const handleCancelGeneration = () => {
+    if (generationAbortControllerRef.current) {
+      generationAbortControllerRef.current.abort();
+    }
+  };
+
   const handleSubmit = async () => {
     if (selectedOption && quizId) {
+      setGenerationError(null);
+      setActiveStage("updating_quiz_settings");
       setIsLoading(true);
+      generationAbortControllerRef.current = new AbortController();
       try {
-        quizData.maxQuestions = selectedOption;
-
-        const updatedQuizId = await updateQuiz(quizId, selectedOption);
+        const updatedQuizId = await updateQuiz(
+          quizId,
+          selectedOption,
+          {
+            signal: generationAbortControllerRef.current.signal,
+            onProgress: (stage) => setActiveStage(stage),
+          },
+        );
 
         if (updatedQuizId) {
           toast.success("Quiz updated successfully!");
@@ -53,12 +94,17 @@ export default function MaxQuestionsSelector() {
           navigate(`/professor/quiz/${quizId}/generate-quiz`);
         }
       } catch (error) {
-        if (error instanceof Error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          toast("Quiz generation cancelled.");
+        } else if (error instanceof Error) {
+          setGenerationError(error.message);
           toast.error(`Error updating quiz: ${error.message}`);
         } else {
+          setGenerationError("Error updating quiz");
           toast.error("Error updating quiz");
         }
       } finally {
+        generationAbortControllerRef.current = null;
         setIsLoading(false);
       }
     } else {
@@ -69,9 +115,12 @@ export default function MaxQuestionsSelector() {
   return (
     <div className="flex h-[calc(100%-5rem)] w-full flex-col justify-center">
       <MultiStepLoader
-        loadingStates={getLoadingStates(quizData?.questionType || "")}
+        loadingStates={GENERATION_PROGRESS_STEPS}
         loading={isLoading}
-        duration={2000}
+        loop={false}
+        activeStep={activeStageIndex}
+        onCancel={handleCancelGeneration}
+        cancelLabel="Cancel generation"
       />
       <h2 className="text-xl font-bold md:text-3xl">
         Set Your Students' Next Challenge!
@@ -141,6 +190,21 @@ export default function MaxQuestionsSelector() {
           >
             <Plus size={14} />
           </button>
+        </div>
+      )}
+
+      {generationError && !isLoading && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{generationError}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3"
+            onClick={handleSubmit}
+            disabled={!selectedOption}
+          >
+            Retry generation
+          </Button>
         </div>
       )}
 
