@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { QuizQuestions } from "@/lib/types";
 import { QuestionDifficulty } from "@/lib/types";
 import { toast } from "react-hot-toast";
@@ -126,7 +127,11 @@ export default function CustomizeQuiz() {
   const [bulkTime, setBulkTime] = useState<string>("30");
   const [customPoints, setCustomPoints] = useState<boolean>(false);
   const [customTime, setCustomTime] = useState<boolean>(false);
-  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<{
+    ids: string[];
+    label: string;
+  } | null>(null);
   const [questionTypeModalOpen, setQuestionTypeModalOpen] = useState(false);
   const [smartOrganizeMode, setSmartOrganizeMode] =
     useState<SmartOrganizeMode>("sequential");
@@ -155,6 +160,16 @@ export default function CustomizeQuiz() {
       setQuestions([]);
     }
   }, [quizQuestionsData]);
+
+  useEffect(() => {
+    if (questions.length === 0) {
+      setSelectedQuestionIds([]);
+      return;
+    }
+
+    const validIds = new Set(questions.map((question) => question.quiz_question_id));
+    setSelectedQuestionIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [questions]);
 
   const { mutate: updateBulk, isPending: isUpdatingBulk } = useMutation({
     mutationFn: () => updateBulkPointsAndTime(quizId!, bulkPoints, bulkTime),
@@ -222,10 +237,19 @@ export default function CustomizeQuiz() {
     });
 
   const deleteMutation = useMutation({
-    mutationFn: (questionId: string) => deleteQuestion(questionId),
-    onSuccess: () => {
+    mutationFn: async (questionIds: string[]) => {
+      await Promise.all(questionIds.map((questionId) => deleteQuestion(questionId)));
+    },
+    onSuccess: (_, questionIds) => {
       queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
-      toast.success("Question deleted successfully");
+      setSelectedQuestionIds((prev) =>
+        prev.filter((id) => !questionIds.includes(id)),
+      );
+      toast.success(
+        questionIds.length === 1
+          ? "Question deleted successfully"
+          : `${questionIds.length} questions deleted successfully`,
+      );
     },
     onError: (error: Error) => {
       toast.error(`Failed to delete question: ${error.message}`);
@@ -233,10 +257,18 @@ export default function CustomizeQuiz() {
   });
 
   const duplicateMutation = useMutation({
-    mutationFn: (questionId: string) => duplicateQuestion(questionId),
-    onSuccess: () => {
+    mutationFn: async (questionIds: string[]) => {
+      for (const questionId of questionIds) {
+        await duplicateQuestion(questionId);
+      }
+    },
+    onSuccess: (_, questionIds) => {
       queryClient.invalidateQueries({ queryKey: ["questions", quizId] });
-      toast.success("Question duplicated successfully");
+      toast.success(
+        questionIds.length === 1
+          ? "Question duplicated successfully"
+          : `${questionIds.length} questions duplicated successfully`,
+      );
     },
     onError: (error: Error) => {
       toast.error(`Failed to duplicate question: ${error.message}`);
@@ -247,19 +279,69 @@ export default function CustomizeQuiz() {
     setQuestionTypeModalOpen(true);
   };
 
+  const getOrderedSelectedIds = () =>
+    questions
+      .filter((question) => selectedQuestionIds.includes(question.quiz_question_id))
+      .map((question) => question.quiz_question_id);
+
+  const openDeleteDialog = (ids: string[], label: string) => {
+    if (ids.length === 0) {
+      return;
+    }
+    setPendingDeleteAction({ ids, label });
+  };
+
   const handleDuplicate = (questionId: string) => {
-    duplicateMutation.mutate(questionId);
+    duplicateMutation.mutate([questionId]);
+  };
+
+  const handleDuplicateSelected = () => {
+    const selectedIds = getOrderedSelectedIds();
+    if (selectedIds.length === 0) return;
+    duplicateMutation.mutate(selectedIds);
+  };
+
+  const handleDuplicateAll = () => {
+    if (questions.length === 0) return;
+    duplicateMutation.mutate(questions.map((question) => question.quiz_question_id));
   };
 
   const handleDelete = (questionId: string) => {
-    setQuestionToDelete(questionId);
+    openDeleteDialog([questionId], "this question");
+  };
+
+  const handleDeleteSelected = () => {
+    const selectedIds = getOrderedSelectedIds();
+    openDeleteDialog(selectedIds, `${selectedIds.length} selected questions`);
+  };
+
+  const handleDeleteAll = () => {
+    openDeleteDialog(
+      questions.map((question) => question.quiz_question_id),
+      "all questions",
+    );
   };
 
   const confirmDelete = () => {
-    if (questionToDelete) {
-      deleteMutation.mutate(questionToDelete);
-      setQuestionToDelete(null);
+    if (pendingDeleteAction) {
+      deleteMutation.mutate(pendingDeleteAction.ids);
+      setPendingDeleteAction(null);
     }
+  };
+
+  const handleQuestionSelection = (questionId: string, checked: boolean) => {
+    setSelectedQuestionIds((prev) =>
+      checked ? Array.from(new Set([...prev, questionId])) : prev.filter((id) => id !== questionId),
+    );
+  };
+
+  const handleSelectAllQuestions = (checked: boolean) => {
+    if (!checked) {
+      setSelectedQuestionIds([]);
+      return;
+    }
+
+    setSelectedQuestionIds(questions.map((question) => question.quiz_question_id));
   };
 
   const handleCustomInput = (
@@ -388,6 +470,11 @@ export default function CustomizeQuiz() {
   const totalPoints = Array.isArray(questions)
     ? questions.reduce((total, q) => total + (q.points ?? 0), 0)
     : 0;
+  const selectedCount = selectedQuestionIds.length;
+  const allSelected = questions.length > 0 && selectedCount === questions.length;
+  const hasPartialSelection = selectedCount > 0 && !allSelected;
+  const showAllSelectionActions = allSelected;
+  const showSelectedActions = hasPartialSelection;
 
   return (
     <>
@@ -559,6 +646,72 @@ export default function CustomizeQuiz() {
               Add Question
             </Button>
           </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 rounded-md border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-800">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={(checked) =>
+                  handleSelectAllQuestions(Boolean(checked))
+                }
+              />
+              Select all
+            </label>
+            <span className="text-xs text-zinc-500">
+              {selectedCount} selected
+            </span>
+            {showAllSelectionActions && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={handleDuplicateAll}
+                  disabled={questions.length === 0 || duplicateMutation.isPending}
+                >
+                  <Copy size={12} />
+                  Duplicate All
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={handleDeleteAll}
+                  disabled={questions.length === 0 || deleteMutation.isPending}
+                >
+                  <Trash size={12} />
+                  Delete All
+                </Button>
+              </>
+            )}
+            {showSelectedActions && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={handleDuplicateSelected}
+                  disabled={selectedCount === 0 || duplicateMutation.isPending}
+                >
+                  <Copy size={12} />
+                  Duplicate Selected
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedCount === 0 || deleteMutation.isPending}
+                >
+                  <Trash size={12} />
+                  Delete Selected
+                </Button>
+              </>
+            )}
+          </div>
           <div className="h-[72vh] overflow-y-auto pr-2">
             {Array.isArray(questions) && questions.length > 0 ? (
               <DragDropContext onDragEnd={onDragEnd}>
@@ -587,6 +740,9 @@ export default function CustomizeQuiz() {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 className={`relative rounded-lg bg-white p-4 shadow dark:bg-zinc-900 ${snapshot.isDragging ? "opacity-50" : ""
+                                  } ${selectedQuestionIds.includes(q.quiz_question_id)
+                                    ? "ring-2 ring-indigo-400 dark:ring-indigo-500"
+                                    : ""
                                   } ${isIncomplete
                                     ? "bg-red-100 dark:bg-red-900/20"
                                     : ""
@@ -595,6 +751,17 @@ export default function CustomizeQuiz() {
                                 <div>
                                   <div className="mb-2 flex flex-wrap justify-between text-xs">
                                     <div className="flex flex-wrap items-center gap-2">
+                                      <Checkbox
+                                        checked={selectedQuestionIds.includes(
+                                          q.quiz_question_id,
+                                        )}
+                                        onCheckedChange={(checked) =>
+                                          handleQuestionSelection(
+                                            q.quiz_question_id,
+                                            Boolean(checked),
+                                          )
+                                        }
+                                      />
                                       <div {...provided.dragHandleProps}>
                                         <GripVertical className="size-6 cursor-move rounded-md border border-zinc-200 p-1 dark:border-zinc-800" />
                                       </div>
@@ -807,23 +974,27 @@ export default function CustomizeQuiz() {
         />
       )}
       <AlertDialog
-        open={!!questionToDelete}
-        onOpenChange={() => setQuestionToDelete(null)}
+        open={!!pendingDeleteAction}
+        onOpenChange={() => setPendingDeleteAction(null)}
       >
         <AlertDialogContent className="dark:text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Are you sure you want to delete this question?
+              Are you sure you want to delete {pendingDeleteAction?.label || "this question"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This question will be permanently
-              deleted from the quiz.
+              This action cannot be undone. The selected question data will be
+              permanently deleted from the quiz.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>
-              Delete
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -144,6 +144,8 @@ export default function QuizSettingsForm({
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       title: quiz?.title || "Untitled Quiz",
       description: quiz?.description || "",
@@ -195,6 +197,22 @@ export default function QuizSettingsForm({
       });
     }
   }, [formErrors, form]);
+
+  // Clear externally injected errors as soon as the user starts fixing fields.
+  useEffect(() => {
+    const subscription = form.watch((_, { name }) => {
+      if (!name) return;
+
+      if (["title", "description", "subject"].includes(name)) {
+        form.clearErrors(name as "title" | "description" | "subject");
+        if (formErrors.length > 0) {
+          setFormErrors([]);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [form, formErrors.length, setFormErrors]);
 
   // Check for overnight schedules
   useEffect(() => {
