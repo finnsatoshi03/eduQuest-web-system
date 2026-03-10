@@ -37,6 +37,10 @@ import ScheduledQuizRoute from "./components/Auth/Student/scheduled_room/schedul
 import Responses from "./components/Auth/Professor/scheduled_room/responses";
 import ProfileSettings from "./components/Auth/ProfileSettings";
 
+// TEMPORARY MAINTENANCE FLAG
+// Set to false when the system is ready to go live again.
+const MAINTENANCE_MODE = true;
+
 // Define route configurations
 const publicRoutes = [
   { path: "/", element: <LandingPage /> },
@@ -96,6 +100,30 @@ const studentRoutes = [
 ];
 
 const App: React.FC = () => {
+  if (MAINTENANCE_MODE) {
+    return (
+      <ThemeProvider>
+        <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-6 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
+          <div className="w-full max-w-2xl rounded-xl border border-zinc-300 bg-white p-8 text-center shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
+              System Notice
+            </p>
+            <h1 className="text-3xl font-black md:text-4xl">
+              System Down For Maintenance
+            </h1>
+            <p className="mx-auto mt-4 max-w-xl text-sm opacity-80 md:text-base">
+              EduQuest is currently under maintenance. We are applying updates
+              and will be back online shortly.
+            </p>
+            <p className="mt-6 text-xs opacity-70">
+              Please check back again in a little while.
+            </p>
+          </div>
+        </div>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <>
       <ThemeProvider>
