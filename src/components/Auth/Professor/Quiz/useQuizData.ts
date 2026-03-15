@@ -19,12 +19,14 @@ export function useQuizData(quizId: string) {
       return quiz;
     },
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 
   const questionsQuery = useQuery<QuizQuestions[], Error>({
     queryKey: ["questions", quizId],
     queryFn: async () => getQuestions(quizId),
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 
   const updateTitleMutation = useMutation({
