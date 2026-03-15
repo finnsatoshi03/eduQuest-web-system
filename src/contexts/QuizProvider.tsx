@@ -4,6 +4,7 @@ import {
   GenerateQuizProgressEvent,
   GenerateQuizProgressStage,
 } from "@/services/api/apiQuiz";
+import { useQueryClient } from "@tanstack/react-query";
 import { QuestionDifficulty } from "@/lib/types";
 import supabase from "@/services/supabase";
 import toast from "react-hot-toast";
@@ -52,6 +53,7 @@ function resolveDifficulty(
 }
 
 export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [quizData, setQuizData] = useState<{
     file: File | null;
     questionType: string | null;
@@ -171,6 +173,12 @@ export const QuizProvider: React.FC<QuizProviderProps> = ({ children }) => {
         );
 
       if (questionsError) throw questionsError;
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["quiz", quizId] }),
+        queryClient.invalidateQueries({ queryKey: ["questions", quizId] }),
+        queryClient.invalidateQueries({ queryKey: ["quizzes"] }),
+      ]);
 
       emitProgress("completed");
       return quizId;
