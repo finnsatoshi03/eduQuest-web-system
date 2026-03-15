@@ -414,16 +414,14 @@ export interface GenerateQuizProgressEvent {
 
 export async function getQuestions(
   quizId: string,
-): Promise<QuizQuestions[] | null> {
+): Promise<QuizQuestions[]> {
   const { data, error } = await supabase
     .from("quiz_questions")
     .select()
     .eq("quiz_id", quizId);
 
   if (error) throw new Error(error.message);
-  const questions: QuizQuestions[] | null = data || [];
-
-  return questions && questions.length > 0 ? questions : null;
+  return data || [];
 }
 
 export async function getQuestion(

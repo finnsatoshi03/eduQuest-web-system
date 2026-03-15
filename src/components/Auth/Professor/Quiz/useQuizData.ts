@@ -23,13 +23,7 @@ export function useQuizData(quizId: string) {
 
   const questionsQuery = useQuery<QuizQuestions[], Error>({
     queryKey: ["questions", quizId],
-    queryFn: async () => {
-      const questions = await getQuestions(quizId);
-      if (!questions) {
-        throw new Error("Questions not found");
-      }
-      return questions;
-    },
+    queryFn: async () => getQuestions(quizId),
     staleTime: 1000 * 60 * 5,
   });
 
