@@ -39,7 +39,7 @@ import ProfileSettings from "./components/Auth/ProfileSettings";
 
 // TEMPORARY MAINTENANCE FLAG
 // Set to false when the system is ready to go live again.
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 // Define route configurations
 const publicRoutes = [
